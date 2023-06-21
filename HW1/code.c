@@ -24,9 +24,9 @@ static void quickSort(int arr[], int low, int high){
 	if (low < high) {
 		int pi = partition(arr, low, high);
 		quickSort(arr, low, pi - 1);
-		//coro_yield();
+		coro_yield();
 		quickSort(arr, pi + 1, high);
-		//coro_yield();
+		coro_yield();
 	}
 }
 
