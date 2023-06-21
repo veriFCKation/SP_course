@@ -3,54 +3,69 @@
 #include <string.h>
 #include "libcoro.h"
 
-/**
- * You can compile and run this code using the commands:
- *
- * $> gcc solution.c libcoro.c
- * $> ./a.out
- */
-
-/**
- * A function, called from inside of coroutines recursively. Just to demonstrate
- * the example. You can split your code into multiple functions, that usually
- * helps to keep the individual code blocks simple.
- */
-static void
-other_function(const char *name, int depth)
-{
-	printf("%s: entered function, depth = %d\n", name, depth);
-	coro_yield();
-	if (depth < 3)
-		other_function(name, depth + 1);
+void swap(int* a, int* b){
+	int t = *a;
+	*a = *b;
+	*b = t;
+}
+int partition(int arr[], int low, int high){
+	int pivot = arr[high];
+	int i = (low - 1);
+	for (int j = low; j <= high - 1; j++) {
+		if (arr[j] < pivot) {
+			i++;
+			swap(&arr[i], &arr[j]);
+		}
+	}
+	swap(&arr[i + 1], &arr[high]);
+	return (i + 1);
+}
+static void quickSort(int arr[], int low, int high){
+	if (low < high) {
+		int pi = partition(arr, low, high);
+		quickSort(arr, low, pi - 1);
+		//coro_yield();
+		quickSort(arr, pi + 1, high);
+		//coro_yield();
+	}
 }
 
-/**
- * Coroutine body. This code is executed by all the coroutines. Here you
- * implement your solution, sort each individual file.
- */
 static int
-coroutine_func_f(void *context)
+coroutine_func_f(void *context, char *file_name)
 {
-	/* IMPLEMENT SORTING OF INDIVIDUAL FILES HERE. */
-
 	struct coro *this = coro_this();
 	char *name = context;
 	printf("Started coroutine %s\n", name);
 	printf("%s: switch count %lld\n", name, coro_switch_count(this));
 	printf("%s: yield\n", name);
 	coro_yield();
-
+	
+	FILE fptr = fopen(file_name, "r");
+	int arr[20000];
+	int i = 0;
+	while (!feof(fptr)){
+		fscanf(fptr, "%d", arr[i]);
+		i++;
+	}
+	fclose(fptr)
+	
 	printf("%s: switch count %lld\n", name, coro_switch_count(this));
 	printf("%s: yield\n", name);
 	coro_yield();
 
 	printf("%s: switch count %lld\n", name, coro_switch_count(this));
-	other_function(name, 1);
-	printf("%s: switch count after other function %lld\n", name,
-	       coro_switch_count(this));
+	quickSort(arr, 0, i - 1)
+	printf("%s: switch count after other function %lld\n", name, coro_switch_count(this));
+	
+	fptr = fopen(file_name, "w");
+	for (int k = 0; k < i; ++k){
+		fprintf(fptr, "%d ", arr[k])
+	}
+	fclose(fptr)
+	
+	int stat = coro_status(this);
 	free(name);
-	/* This will be returned from coro_status(). */
-	return 0;
+	return stat;
 }
 
 int
@@ -59,37 +74,63 @@ main(int argc, char **argv)
 	/* Delete these suppressions when start using the args. */
 	(void)argc;
 	(void)argv;
-	/* Initialize our coroutine global cooperative scheduler. */
+	
 	coro_sched_init();
-	/* Start several coroutines. */
 	for (int i = 0; i < 3; ++i) {
-		/*
-		 * The coroutines can take any 'void *' interpretation of which
-		 * depends on what you want. Here as an example I give them
-		 * some names.
-		 */
-		char name[16];
+		char name[16], file_name[32];
 		sprintf(name, "coro_%d", i);
-		/*
-		 * I have to copy the name. Otherwise all the coroutines would
-		 * have the same name when they finally start.
-		 */
-		coro_new(coroutine_func_f, strdup(name));
+		sprintf(file_name, "test_%d", i)
+		
+		coro_new(coroutine_func_f, strdup(name, file_name));
 	}
-	/* Wait for all the coroutines to end. */
 	struct coro *c;
 	while ((c = coro_sched_wait()) != NULL) {
-		/*
-		 * Each 'wait' returns a finished coroutine with which you can
-		 * do anything you want. Like check its exit status, for
-		 * example. Don't forget to free the coroutine afterwards.
-		 */
 		printf("Finished %d\n", coro_status(c));
 		coro_delete(c);
 	}
-	/* All coroutines have finished. */
-
-	/* IMPLEMENT MERGING OF THE SORTED ARRAYS HERE. */
-
+	
+	FILE fptrs[3];
+	for(int i = 0; i < 3; ++i){
+		char file_name[32];
+		sprintf(file_name, "test_%d", i);
+		fptrs[i] = fopen(file_name, "r");
+	}
+	
+	bool done = false;
+	int arr[3]
+	for (int i = 0; i < 3; ++i){
+		if (!feof(fptrs[i])){
+			fscanf(fptrs[i], "%d", arr[i]);
+		}
+		else{
+			arr[i] = -1;
+		}
+	}
+	FILE rez_file = fopen("rezult.txt", "w");
+	while (!done){
+		int min_num = -1
+		for (int i  = 0; i < 3; ++i){
+			if (arr[i] != -1){
+				if ((min_num ==-1) || (arr[min_num] > arr[i]))
+					min_num = i;
+			}
+		}
+		if (min_num != -1){
+			fprintf(rez_file, "%d ", arr[min_num])
+			if (!feof(fptrs[min_num])){
+				fscanf(fptrs[min_num], "%d", arr[min_num]);
+			}
+			else{
+				arr[min_num] = -1;
+			}
+			continue;
+		}
+		done = true;
+	}
+	
+	for(int i = 0; i < 3; ++i){
+		remove(fptrs[i])
+	}
+	fclose(rez_file)
 	return 0;
 }
