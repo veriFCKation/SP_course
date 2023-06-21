@@ -3,6 +3,8 @@
 #include <string.h>
 #include "libcoro.h"
 
+//https://github.com/Gerold103/sysprog/blob/master/1/libcoro.c
+
 void swap(int* a, int* b){
 	int t = *a;
 	*a = *b;
