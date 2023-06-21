@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "libcoro.h"
-
+//still get segmentation fault
 void swap(int* a, int* b){
 	int t = *a;
 	*a = *b;
@@ -44,7 +44,7 @@ coroutine_func_f(void *context)
 	int arr[20000];
 	int i = 0;
 	while (!feof(fptr)){
-		fscanf(fptr, "%d", arr[i]);
+		fscanf(fptr, "%d", &arr[i]);
 		i++;
 	}
 	fclose(fptr);
@@ -99,7 +99,7 @@ main(int argc, char **argv)
 	int arr[3];
 	for (int i = 0; i < 3; ++i){
 		if (!feof(fptrs[i])){
-			fscanf(fptrs[i], "%d", arr[i]);
+			fscanf(fptrs[i], "%d", &arr[i]);
 		}
 		else{
 			arr[i] = -1;
@@ -117,7 +117,7 @@ main(int argc, char **argv)
 		if (min_num != -1){
 			fprintf(rez_file, "%d ", arr[min_num]);
 			if (!feof(fptrs[min_num])){
-				fscanf(fptrs[min_num], "%d", arr[min_num]);
+				fscanf(fptrs[min_num], "%d", &arr[min_num]);
 			}
 			else{
 				arr[min_num] = -1;
