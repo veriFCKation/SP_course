@@ -12,8 +12,8 @@ long int counter = 0, cN = 10000000;
 
 
 void *add_func(){
-	while (__atomic_fetch_add(&counter, 1,__ATOMIC_SEQ_CST) >= cN){
-		break;
+	while (__atomic_fetch_add(&counter, 1,__ATOMIC_SEQ_CST) < cN){
+		continue;
 	}
 }
 
@@ -21,11 +21,11 @@ int main(){
   
   struct timespec t1, t2;
   
- for (int i = 0; i < tN; ++i){
-  	pthread_create(&thread[i], NULL, *add_func, NULL);
-  }
   
   clock_gettime(CLOCK_MONOTONIC, &t1);
+  for (int i = 0; i < tN; ++i){
+  	pthread_create(&thread[i], NULL, *add_func, NULL);
+  }
   for (int i = 0; i < tN; ++i){
   	pthread_join(thread[i], NULL);
   }
