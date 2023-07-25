@@ -7,13 +7,13 @@ pthread_t thread[3];
 pthread_mutex_t mutex;
 int tN = 3;
 long int counter = 0, cN = 10000000;
+//__ATOMIC_RELAXED
+//__ATOMIC_SEQ_CST
 
 
-void *lock_func(){
-	for (int i = 0; i < cN; ++i){
-		pthread_mutex_lock(&mutex);
-		counter = counter + 1;
-		pthread_mutex_unlock(&mutex);
+void *add_func(){
+	while (counter != cN){
+		__atomic_fetch_add(&counter, 1,__ATOMIC_SEQ_CST);
 	}
 }
 
@@ -23,7 +23,7 @@ int main(){
   
   clock_gettime(CLOCK_MONOTONIC, &t1);
   for (int i = 0; i < tN; ++i){
-  	pthread_create(&thread[i], NULL, *lock_func, NULL);
+  	pthread_create(&thread[i], NULL, *add_func, NULL);
   	pthread_join(thread[i], NULL);
   }
   clock_gettime(CLOCK_MONOTONIC, &t2);
@@ -33,7 +33,7 @@ int main(){
   
   printf("sec: %ld\nnsec: %ld\n", sec, nsec);
   printf("time per one (nsec): %f\n", (sec*1000000000.0 + nsec) / cN);
-  printf("thread #: %d\ncounter: %ld\n", tN, counter);
+  printf("thread #: %d\ncounter: %ld\nsequential\n", tN, counter);
 
   return 0;
 }
