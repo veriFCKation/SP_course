@@ -1,0 +1,80 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "libcoro.h"
+
+int read_file(int arr[], FILE* fptr){
+	printf("f");
+	int i = 0;
+	while (fscanf(fptr, "%d", &arr[i]) != EOF){
+		i++;
+	}
+	return i;
+}
+
+int merge(char* name_from, char* name_to){
+	FILE* from = fopen(name_from, "r");
+	FILE* to = fopen(name_to, "r");
+	int* arr1 = malloc(20000 * sizeof(int));
+	int* arr2 = malloc(20000 * sizeof(int));
+	int* rez = malloc(20000 * sizeof(int));
+	int i = 0, j = 0, k = 0, n, m;
+	n = read_file(arr1, from);
+	m = read_file(arr2, to);
+	
+	while(i < n && j < m){
+		if (arr1[i] <= arr2[j]){
+			rez[k] = arr1[i];
+			i++;
+		}
+		else{
+			rez[k] = arr2[j];
+			j++;
+		}
+		k++;
+	}
+	fclose(from);
+	remove(name_from);
+	fclose(to);
+	to = fopen(name_to, "w");
+	for (int indx = 0; indx < k; ++indx){
+		fprintf(to, "%d ", rez[indx]);
+	}
+	fclose(to);
+}
+
+void swap(int* a, int* b){
+	int t = *a;
+	*a = *b;
+	*b = t;
+}
+int partition(int arr[], int low, int high){
+	int pivot = arr[high];
+	int i = (low - 1);
+	for (int j = low; j <= high - 1; j++) {
+		if (arr[j] < pivot) {
+			i++;
+			swap(&arr[i], &arr[j]);
+		}
+	}
+	swap(&arr[i + 1], &arr[high]);
+	return (i + 1);
+}
+static void quickSort(int arr[], int low, int high){
+	if (low < high) {
+		int pi = partition(arr, low, high);
+		quickSort(arr, low, pi - 1);
+		//coro_yield();
+		quickSort(arr, pi + 1, high);
+		//coro_yield();
+	}
+}
+
+int
+main(int argc)
+{
+	char* name1 = "text_1.txt";
+	char* name2 = "text_2.txt";
+	merge(name1, name2);
+	
+}
