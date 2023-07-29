@@ -138,7 +138,7 @@ coroutine_func_f(void *context)
 	while (__atomic_fetch_add(&curr_name, 1,__ATOMIC_SEQ_CST) < file_num){
 		pthread_mutex_lock(&mutex);
 		if (curr_name >= file_num){ 
-			this->is_finished = true;
+			//this->is_finished = true;
 			clock_gettime(CLOCK_MONOTONIC, &t2);
 			time_plus(t1, t2, coro_ts[name]); 
 			break;
@@ -202,7 +202,6 @@ main(int argc, char** argv)
 	while (arg_i != argc){
 		file_names[arg_i-2] = argv[arg_i++];
 	}
-	
 	coro_sched_init();
 	/* Start several coroutines. */
 	for (int i = 0; i < coroutine_num; ++i) {
@@ -215,7 +214,7 @@ main(int argc, char** argv)
 	struct coro *c;
 	while ((c = coro_sched_wait()) != NULL) {
 		if (coro_is_finished(c)){
-			printf("Finished %s\n", c->func_arg);
+			printf("Finished with %d", coro_status(c));
 			coro_delete(c);
 		}
 	}
