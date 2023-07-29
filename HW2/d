@@ -1,0 +1,89 @@
+void merge(char* name_from, char* name_to){
+  if (name_from == NULL || name_to == NULL || strlen(name_from) == 0 || strlen(name_to) == 0) {
+    printf("Invalid file names");
+    return;
+  }
+
+  FILE* from = fopen(name_from, "r");
+  FILE* to = fopen(name_to, "r");
+  if (from == NULL || to == NULL){
+    printf("File problem");
+    return;
+  }
+
+  int* arr1 = malloc(40000 * sizeof(int));
+  int* arr2 = malloc(40000 * sizeof(int));
+  int* rez = malloc(80000 * sizeof(int));
+  int i = 0, j = 0, k = 0, n, m;
+  if (arr1 == NULL || arr2 == NULL || rez == NULL){
+    printf("Malloc problem");
+    fclose(from); fclose(to);
+    return;
+  }
+
+  n = read_file(arr1, from);
+  m = read_file(arr2, to);
+
+  if (n < 0 || m < 0) {
+    printf("Read operation failed");
+    fclose(from); fclose(to);
+    free(arr1); free(arr2); free(rez);
+    return;
+  }
+
+  while(i < n && j < m){
+    if (i < 0 || i >= n || j < 0 || j >= m) {
+      printf("Array index out of bounds");
+      fclose(from); fclose(to);
+      free(arr1); free(arr2); free(rez);
+      return;
+    }
+
+    if (arr1[i] <= arr2[j]){
+      rez[k] = arr1[i];
+      i++;
+    }
+    else{
+      rez[k] = arr2[j];
+      j++;
+    }
+    k++;
+  }
+
+  while(i < n){
+    if (i < 0 || i >= n) {
+      printf("Array index out of bounds");
+      fclose(from); fclose(to);
+      free(arr1); free(arr2); free(rez);
+      return;
+    }
+    rez[k] = arr1[i];
+    k++;i++;
+  }
+
+  while(j < m){
+    if (j < 0 || j >= m) {
+      printf("Array index out of bounds");
+      fclose(from); fclose(to);
+      free(arr1); free(arr2); free(rez);
+      return;
+    }
+    rez[k] = arr1[j];
+    k++;j++;
+  }
+
+  free(arr1);
+  free(arr2);
+  fclose(from);
+  remove(name_from);
+  fclose(to);
+
+  to = fopen(name_to, "w");
+  if (to == NULL){
+    printf("Reopen problem");
+    return;
+  }
+  write_file(rez, k, to);
+  free(rez);
+  fclose(to);
+}
