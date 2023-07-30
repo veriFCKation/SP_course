@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
-#include <pthread.h>
 #include "libcoro.h"
 
 struct timespec time_count(struct timespec t1, struct timespec t2){
@@ -14,10 +14,26 @@ struct timespec time_count(struct timespec t1, struct timespec t2){
 	return rez;
 }
 
+void time_add(struct timespec t, struct timespec* where){
+	where->tv_sec = where->tv_sec + t.tv_sec;
+	where->tv_nsec = where->tv_nsec + t.tv_nsec;
+}
+
 void time_plus(struct timespec t1, struct timespec t2, struct timespec* where){
 	struct timespec diff = time_count(t1, t2);
 	where->tv_sec = where->tv_sec + diff.tv_sec;
 	where->tv_nsec = where->tv_nsec + diff.tv_nsec;
+}
+
+long int count_file(char* name){
+	FILE* fptr = fopen(name, "r");
+	long int i = 0;
+	int buf;
+	while (fscanf(fptr, "%d", &buf) != EOF){
+		i++;
+	}
+	fclose(fptr);
+	return i;
 }
 
 int read_file(int arr[], FILE* fptr){
@@ -43,17 +59,21 @@ void merge(char* name_from, char* name_to){
 		printf("file problem\n");
 		return;
 	}
-	int* arr1 = malloc(40000 * sizeof(int));
-	int* arr2 = malloc(40000 * sizeof(int));
-	int* rez = malloc(80000 * sizeof(int));
-	int i = 0, j = 0, k = 0, n, m;
+	int i = 0, j = 0, k = 0;
+	long int n, m, l;
+	n = count_file(name_from);
+	m = count_file(name_to);
+	l = n + m;
+	int* arr1 = malloc(n* sizeof(int));
+	int* arr2 = malloc(m* sizeof(int));
+	int* rez = malloc(l * sizeof(int));
+	read_file(arr1, from);
+	read_file(arr2, to);
 	if (arr1 == NULL || arr2 == NULL || rez == NULL){
 		printf("malloc problem\n");
 		fclose(from); fclose(to);
 		return;
 	}
-	n = read_file(arr1, from);
-	m = read_file(arr2, to);
 	
 	while(i < n && j < m){
 		if (arr1[i] <= arr2[j]){
@@ -106,19 +126,22 @@ int partition(int arr[], int low, int high){
 	swap(&arr[i + 1], &arr[high]);
 	return (i + 1);
 }
-static void quickSort(int arr[], int low, int high){
+struct timespec quickSort(int arr[], int low, int high){
+	struct timespec t1, t2;
+	clock_gettime(CLOCK_MONOTONIC, &t1);
 	if (low < high) {
 		int pi = partition(arr, low, high);
 		quickSort(arr, low, pi - 1);
 		//coro_yield();
 		quickSort(arr, pi + 1, high);
+		clock_gettime(CLOCK_MONOTONIC, &t2);
 		coro_yield();
 	}
+	return time_count(t1, t2);
 }
 
 char* file_names[1000];
 int file_num, curr_name = 0;
-pthread_mutex_t mutex;
 struct timespec coro_ts[20];
 long long int coro_switch[20];
 
@@ -145,7 +168,6 @@ coroutine_func_f(void *context)
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	
 	while (__atomic_fetch_add(&curr_name, 1,__ATOMIC_SEQ_CST) <= file_num){
-		pthread_mutex_lock(&mutex);
 		--curr_name;
 		if (curr_name >= file_num){ 
 			clock_gettime(CLOCK_MONOTONIC, &t2);
@@ -155,9 +177,6 @@ coroutine_func_f(void *context)
 		}
 		char* file_name = file_names[curr_name];
 		curr_name++;
-		int mutex_rez = pthread_mutex_unlock(&mutex);
-		if (mutex_rez != 0)
-			printf("mutex\n");
 		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 		printf("coro_%d: yield\n", name);
@@ -169,8 +188,11 @@ coroutine_func_f(void *context)
 		FILE* fptr = fopen(file_name, "r");
 		if (fptr == NULL)
 			printf("open prob\n");
-		int* arr = malloc(40000 * sizeof(int));
-		int len = read_file(arr, fptr);
+		
+		long int len = count_file(file_name);
+		int* arr = malloc(len * sizeof(int));
+		read_file(arr, fptr);
+		
 		fclose(fptr);
 		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
@@ -181,8 +203,13 @@ coroutine_func_f(void *context)
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-		///
-		quickSort(arr, 0, len-1);
+		clock_gettime(CLOCK_MONOTONIC, &t2);
+		time_plus(t1, t2, &coro_ts[name]);
+		
+		struct timespec qt = quickSort(arr, 0, len-1);
+		time_add(qt, &coro_ts[name]);
+		
+		clock_gettime(CLOCK_MONOTONIC, &t1);
 		printf("coro_%d: switch count after other function %lld\n", name,
 		       coro_switch_count(this));
 		clock_gettime(CLOCK_MONOTONIC, &t2);
