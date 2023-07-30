@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
 
 enum {
 	BLOCK_SIZE = 512,
@@ -95,6 +96,7 @@ ufs_open(const char *filename, int flags)
 			file_list = new_file;
 		fptr = new_file;
 	}
+	
 	if (fptr == NULL){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
@@ -103,13 +105,15 @@ ufs_open(const char *filename, int flags)
 	while (fd < file_descriptor_count && file_descriptors[fd] != NULL){
 		fd++;
 	}
+	
 	if (fd == file_descriptor_count){
 		file_descriptor_count++;
 	}
+	
 	fptr->refs++;
-	struct filedesc* new_fd;
+	struct filedesc* new_fd = (struct filedesc *)malloc(sizeof(struct filedesc));
 	new_fd->file = fptr;
-	new_fd->flag = (flags & UFS_CREATE) ? UFS_READ_WRITE : flags;
+	new_fd->flag = (flags == UFS_CREATE) ? UFS_READ_WRITE : flags;
 	file_descriptors[fd] = new_fd;
 	return fd+1;
 }
