@@ -14,10 +14,10 @@ struct timespec time_count(struct timespec t1, struct timespec t2){
 	return rez;
 }
 
-void time_plus(struct timespec t1, struct timespec t2, struct timespec where){
+void time_plus(struct timespec t1, struct timespec t2, struct timespec* where){
 	struct timespec diff = time_count(t1, t2);
-	where.tv_sec = where.tv_sec + diff.tv_sec;
-	where.tv_nsec = where.tv_nsec + diff.tv_nsec;
+	where->tv_sec = where->tv_sec + diff.tv_sec;
+	where->tv_nsec = where->tv_nsec + diff.tv_nsec;
 }
 
 int read_file(int arr[], FILE* fptr){
@@ -29,6 +29,8 @@ int read_file(int arr[], FILE* fptr){
 }
 
 int write_file(int arr[], int n, FILE* fptr){
+	if (fptr == NULL || arr == NULL)
+		printf("write_file prob\n");
 	for (int i = 0; i < n; ++i){
 		fprintf(fptr, "%d ", arr[i]);
 	}
@@ -38,7 +40,7 @@ void merge(char* name_from, char* name_to){
 	FILE* from = fopen(name_from, "r");
 	FILE* to = fopen(name_to, "r");
 	if (from == NULL || to == NULL){
-		printf("file problem");
+		printf("file problem\n");
 		return;
 	}
 	int* arr1 = malloc(40000 * sizeof(int));
@@ -46,7 +48,7 @@ void merge(char* name_from, char* name_to){
 	int* rez = malloc(80000 * sizeof(int));
 	int i = 0, j = 0, k = 0, n, m;
 	if (arr1 == NULL || arr2 == NULL || rez == NULL){
-		printf("malloc problem");
+		printf("malloc problem\n");
 		fclose(from); fclose(to);
 		return;
 	}
@@ -69,7 +71,7 @@ void merge(char* name_from, char* name_to){
 		k++;i++;
 	}
 	while(j < m){
-		rez[k] = arr1[j];
+		rez[k] = arr2[j];
 		k++;j++;
 	}
 	free(arr1);
@@ -79,7 +81,7 @@ void merge(char* name_from, char* name_to){
 	fclose(to);
 	to = fopen(name_to, "w");
 	if (to == NULL){
-		printf("reopen problem");
+		printf("reopen problem\n");
 		return;
 	}
 	write_file(rez, k, to);
@@ -118,43 +120,55 @@ char* file_names[1000];
 int file_num, curr_name = 0;
 pthread_mutex_t mutex;
 struct timespec coro_ts[20];
+long long int coro_switch[20];
 
 
 static int
 coroutine_func_f(void *context)
 {
 	struct timespec t1, t2;
-	clock_gettime(CLOCK_MONOTONIC, &t1);
+	int time_rez = clock_gettime(CLOCK_MONOTONIC, &t1);
+	if (time_rez != 0)
+		printf("time prob");
 	struct coro *this = coro_this();
-	int name = (int*)context;
+	char* str = context;
+	int name;
+	if (sscanf(str, "%d", &name) == 0)
+		printf("sscanf problem\n");
+	
 	printf("Started coroutine coro_%d\n", name);
 	printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 	printf("coro_%d: yield\n", name);
 	clock_gettime(CLOCK_MONOTONIC, &t2);
-	time_plus(t1, t2, coro_ts[name]);
+	time_plus(t1, t2, &coro_ts[name]);
 	coro_yield();
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	
-	while (__atomic_fetch_add(&curr_name, 1,__ATOMIC_SEQ_CST) < file_num){
+	while (__atomic_fetch_add(&curr_name, 1,__ATOMIC_SEQ_CST) <= file_num){
 		pthread_mutex_lock(&mutex);
+		--curr_name;
 		if (curr_name >= file_num){ 
-			//this->is_finished = true;
 			clock_gettime(CLOCK_MONOTONIC, &t2);
-			time_plus(t1, t2, coro_ts[name]); 
+			time_plus(t1, t2, &coro_ts[name]); 
+			coro_switch[name] = coro_switch_count(this);
 			break;
 		}
-		char* file_name = file_names[--curr_name];
+		char* file_name = file_names[curr_name];
 		curr_name++;
-		pthread_mutex_unlock(&mutex);
+		int mutex_rez = pthread_mutex_unlock(&mutex);
+		if (mutex_rez != 0)
+			printf("mutex\n");
 		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 		printf("coro_%d: yield\n", name);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, coro_ts[name]);
+		time_plus(t1, t2, &coro_ts[name]);
 		coro_yield();
-		clock_gettime(CLOCK_MONOTONIC, &t1);
 		
+		clock_gettime(CLOCK_MONOTONIC, &t1);
 		FILE* fptr = fopen(file_name, "r");
+		if (fptr == NULL)
+			printf("open prob\n");
 		int* arr = malloc(40000 * sizeof(int));
 		int len = read_file(arr, fptr);
 		fclose(fptr);
@@ -162,7 +176,7 @@ coroutine_func_f(void *context)
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 		printf("coro_%d: yield\n", name);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, coro_ts[name]);
+		time_plus(t1, t2, &coro_ts[name]);
 		coro_yield();
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 		
@@ -172,19 +186,28 @@ coroutine_func_f(void *context)
 		printf("coro_%d: switch count after other function %lld\n", name,
 		       coro_switch_count(this));
 		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, coro_ts[name]);
+		time_plus(t1, t2, &coro_ts[name]);
 		coro_yield();
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 		       
 		fptr = fopen(file_name, "w");
+		if (fptr == NULL)
+			printf("reopen prob\n");
 		write_file(arr, len, fptr);
 		fclose(fptr);
 		free(arr);
 		
+		if (curr_name >= file_num){
+			clock_gettime(CLOCK_MONOTONIC, &t2);
+			time_plus(t1, t2, &coro_ts[name]); 
+			coro_switch[name] = coro_switch_count(this);
+			break;
+		}
+		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 		printf("coro_%d: yield\n", name);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, coro_ts[name]);
+		time_plus(t1, t2, &coro_ts[name]);
 		coro_yield();
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 	}
@@ -196,25 +219,27 @@ main(int argc, char** argv)
 {
 	struct timespec t1, t2, full_t;
 	clock_gettime(CLOCK_MONOTONIC, &t1);
+
 	const int coroutine_num = atoi(argv[1]); //number of coroutines
 	int arg_i = 2;
 	file_num = argc - 2;
 	while (arg_i != argc){
-		file_names[arg_i-2] = argv[arg_i++];
+		file_names[arg_i-2] = argv[arg_i];
+		arg_i++;
 	}
 	coro_sched_init();
 	/* Start several coroutines. */
 	for (int i = 0; i < coroutine_num; ++i) {
-		/*char coro_name[16];
-		sprintf(coro_name, "coro_%d", i);*/
+		char coro_name[16];
+		sprintf(coro_name, "%d_core", i);
 		coro_ts[i].tv_sec = 0; coro_ts[i].tv_nsec = 0;
-		coro_new(coroutine_func_f, strdup(i));
+		coro_new(coroutine_func_f, strdup(coro_name));
 	}
 	/* Wait for all the coroutines to end. */
 	struct coro *c;
 	while ((c = coro_sched_wait()) != NULL) {
 		if (coro_is_finished(c)){
-			printf("Finished with %d", coro_status(c));
+			printf("Finished\n");
 			coro_delete(c);
 		}
 	}
@@ -228,9 +253,9 @@ main(int argc, char** argv)
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	
 	full_t = time_count(t1, t2);
-	printf("Full time: sec: %ld nsec: %ld\n", full_t.tv_sec, full_t.tv_nsec);
+	printf("Full time: sec: %ld msec: %f\n", full_t.tv_sec, full_t.tv_nsec / 1000000.0);
 	for (int i = 0; i < coroutine_num; ++i) {
-		printf("coro_%d: sec: %ld nsec: %ld\n", i, coro_ts[i].tv_sec, coro_ts[i].tv_nsec);
+		printf("coro_%d: sec: %ld msec: %f, switches:%lld\n", i, coro_ts[i].tv_sec, coro_ts[i].tv_nsec / 1000000.0, coro_switch[i]);
 	}
 	
 	return 0;
