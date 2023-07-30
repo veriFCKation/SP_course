@@ -15,7 +15,7 @@ struct thread_task {
 };
 
 struct thread_pool {
-	pthread_t* threads[TPOOL_MAX_THREADS];
+	pthread_t* threads;
 	int max_count;
 	
 	int thread_count, task_count;
@@ -67,9 +67,9 @@ thread_pool_new(int max_thread_count, struct thread_pool **pool)
 	tp->max_count = max_thread_count;
 	tp->thread_count = 0; tp->task_count = 0;
 	tp->task_q = NULL; tp->end_q = NULL;
-	//tp->threads = malloc(max_thread_count * sizeof(pthread_t*));
+	tp->threads = malloc(max_thread_count * sizeof(pthread_t));
 	for (int i = 0; i < max_thread_count; ++i)
-		tp->threads[i] = NULL;
+		tp->threads[i] = 0;
 	*pool = tp;
 	return 0;
 }
@@ -118,8 +118,8 @@ thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
 	if (pool->task_count > pool->thread_count && 
 		pool->thread_count < pool->max_count){
 		for (int i = 0; i < pool->max_count; ++i){
-			if (pool->threads[i] == NULL){
-				pthread_create(pool->threads[i], NULL,thread_func,pool);
+			if (pool->threads[i] == 0){
+				pthread_create(&pool->threads[i], NULL,thread_func,pool);
 				pool->thread_count++;
 				break;
 			}
