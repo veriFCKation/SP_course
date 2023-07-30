@@ -247,11 +247,16 @@ main(int argc, char** argv)
 	struct timespec t1, t2, full_t;
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 
-	const int coroutine_num = atoi(argv[1]); //number of coroutines
-	int arg_i = 2;
-	file_num = argc - 2;
+	int coroutine_num = atoi(argv[1]); //number of coroutines
+	int diff = 2;
+	if (coroutine_num == 0){
+		coroutine_num = 3;
+		diff = 1;
+	}
+	int arg_i = diff;
+	file_num = argc - diff;
 	while (arg_i != argc){
-		file_names[arg_i-2] = argv[arg_i];
+		file_names[arg_i-diff] = argv[arg_i];
 		arg_i++;
 	}
 	coro_sched_init();
