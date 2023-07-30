@@ -89,7 +89,6 @@ thread_pool_delete(struct thread_pool *pool)
 	pthread_mutex_lock(&pool->mutex);
 	for (int i = 0; i < pool->thread_count; ++i)
 		pthread_join(pool->threads[i], NULL);
-	free(pool->threads);
 	free(pool->task_q);
 	pthread_mutex_destroy(&pool->mutex);
 	free(pool);
@@ -98,7 +97,7 @@ thread_pool_delete(struct thread_pool *pool)
 
 int
 thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
-{
+{	
 	pthread_mutex_lock(&pool->mutex);
 	if (pool->task_count >= TPOOL_MAX_TASKS) { 
 		pthread_mutex_unlock(&pool->mutex);
