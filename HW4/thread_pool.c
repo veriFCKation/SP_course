@@ -1,6 +1,7 @@
 #include "thread_pool.h"
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 struct thread_task {
 	thread_task_f function;
@@ -15,7 +16,7 @@ struct thread_task {
 };
 
 struct thread_pool {
-	pthread_t* threads;
+	pthread_t threads[TPOOL_MAX_THREADS];
 	int max_count;
 	
 	int thread_count, task_count;
@@ -67,9 +68,9 @@ thread_pool_new(int max_thread_count, struct thread_pool **pool)
 	tp->max_count = max_thread_count;
 	tp->thread_count = 0; tp->task_count = 0;
 	tp->task_q = NULL; tp->end_q = NULL;
-	tp->threads = malloc(max_thread_count * sizeof(pthread_t));
-	for (int i = 0; i < max_thread_count; ++i)
+	for (int i = 0; i < max_thread_count; ++i){
 		tp->threads[i] = 0;
+	}
 	*pool = tp;
 	return 0;
 }
