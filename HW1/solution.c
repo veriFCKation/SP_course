@@ -131,7 +131,6 @@ struct timespec quickSort(int arr[], int low, int high){
 	if (low < high) {
 		int pi = partition(arr, low, high);
 		quickSort(arr, low, pi - 1);
-		//coro_yield();
 		quickSort(arr, pi + 1, high);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		coro_yield();
@@ -141,8 +140,6 @@ struct timespec quickSort(int arr[], int low, int high){
 	}
 	return time_count(t1, t2);
 }
-//char* file_names[1000];
-//int file_num, curr_name = 0;
 
 struct meta{
 	char* file_names[1000];
@@ -230,7 +227,6 @@ coroutine_func_f(void *context)
 		time_plus(t1, t2, &full_time);
 		coro_yield();
 		clock_gettime(CLOCK_MONOTONIC, &t1);
-		//curr_name++;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
