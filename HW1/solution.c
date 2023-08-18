@@ -141,9 +141,13 @@ struct timespec quickSort(int arr[], int low, int high){
 	}
 	return time_count(t1, t2);
 }
-char* file_names[1000];
-int file_num, curr_name = 0;
+//char* file_names[1000];
+//int file_num, curr_name = 0;
 
+struct meta{
+	char* file_names[1000];
+	int file_num, curr_name, num_of_cor;
+};
 
 static int
 coroutine_func_f(void *context)
@@ -153,10 +157,10 @@ coroutine_func_f(void *context)
 	if (time_rez != 0)
 		printf("time prob");
 	struct coro *this = coro_this();
-	char* str = context;
-	int name;
-	if (sscanf(str, "%d", &name) == 0)
-		printf("sscanf problem\n");
+	
+	struct meta* meta_info = context;
+	int name = meta_info->num_of_cor;
+	meta_info->num_of_cor++;
 	
 	printf("Started coroutine coro_%d\n", name);
 	printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
@@ -166,9 +170,9 @@ coroutine_func_f(void *context)
 	coro_yield();
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	
-	while (curr_name < file_num){
-		char* file_name = file_names[curr_name];
-		curr_name++;
+	while (meta_info->curr_name < meta_info->file_num){
+		char* file_name = meta_info->file_names[(meta_info->curr_name)];
+		meta_info->curr_name++;
 		
 		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
 		printf("coro_%d: yield\n", name);
@@ -216,7 +220,7 @@ coroutine_func_f(void *context)
 		fclose(fptr);
 		free(arr);
 		
-		if (curr_name >= file_num){
+		if (meta_info->curr_name >= meta_info->file_num){
 			break;
 		}
 		
@@ -226,7 +230,7 @@ coroutine_func_f(void *context)
 		time_plus(t1, t2, &full_time);
 		coro_yield();
 		clock_gettime(CLOCK_MONOTONIC, &t1);
-		curr_name++;
+		//curr_name++;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
@@ -246,19 +250,22 @@ main(int argc, char** argv)
 		coroutine_num = 3;
 		diff = 1;
 	}
+	struct meta* meta_info = (struct meta*)malloc(sizeof(struct meta));
+	meta_info->num_of_cor = 0;
+	meta_info->file_num = argc - diff;
+	
 	int arg_i = diff;
-	file_num = argc - diff;
 	while (arg_i != argc){
-		file_names[arg_i-diff] = argv[arg_i];
+		meta_info->file_names[arg_i-diff] = argv[arg_i];
 		arg_i++;
 	}
-	coro_sched_init();
+	meta_info->curr_name = 0;
 	
+	
+	coro_sched_init();
 	/* Start several coroutines. */
 	for (int i = 0; i < coroutine_num; ++i) {
-		char coro_name[16];
-		sprintf(coro_name, "%d_core", i);
-		coro_new(coroutine_func_f, strdup(coro_name));
+		coro_new(coroutine_func_f, meta_info);
 	}
 	/* Wait for all the coroutines to end. */
 	struct coro *c;
@@ -269,11 +276,11 @@ main(int argc, char** argv)
 		}
 	}
 	/* All coroutines have finished. */
-
+	free(meta_info);
 	//merging
 	FILE* rez_file = fopen("rezult.txt", "w");
 	fclose(rez_file);
-	for (int indx = 2; indx < argc; ++indx){
+	for (int indx = diff; indx < argc; ++indx){
 		merge(argv[indx], "rezult.txt");
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
