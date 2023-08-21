@@ -160,24 +160,11 @@ coroutine_func_f(void *context)
 	meta_info->num_of_cor++;
 	
 	printf("Started coroutine coro_%d\n", name);
-	printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-	printf("coro_%d: yield\n", name);
-	clock_gettime(CLOCK_MONOTONIC, &t2);
-	time_plus(t1, t2, &full_time);
-	coro_yield();
-	clock_gettime(CLOCK_MONOTONIC, &t1);
 	
 	while (meta_info->curr_name < meta_info->file_num){
 		char* file_name = meta_info->file_names[(meta_info->curr_name)];
 		meta_info->curr_name++;
 		
-		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-		printf("coro_%d: yield\n", name);
-		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, &full_time);
-		coro_yield();
-		
-		clock_gettime(CLOCK_MONOTONIC, &t1);
 		FILE* fptr = fopen(file_name, "r");
 		if (fptr == NULL)
 			printf("open prob\n");
@@ -188,23 +175,12 @@ coroutine_func_f(void *context)
 		
 		fclose(fptr);
 		
-		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-		printf("coro_%d: yield\n", name);
-		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, &full_time);
-		coro_yield();
-		clock_gettime(CLOCK_MONOTONIC, &t1);
-		
-		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, &full_time);
-		
 		struct timespec qt = quickSort(arr, 0, len-1);
 		time_add(qt, &full_time);
 		
 		clock_gettime(CLOCK_MONOTONIC, &t1);
-		printf("coro_%d: switch count after other function %lld\n", name,
-		       coro_switch_count(this));
+		printf("coro_%d: switch count after other function\n", name);
+		coro_switch_count(this);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		time_plus(t1, t2, &full_time);
 		coro_yield();
@@ -220,17 +196,10 @@ coroutine_func_f(void *context)
 		if (meta_info->curr_name >= meta_info->file_num){
 			break;
 		}
-		
-		printf("coro_%d: switch count %lld\n", name, coro_switch_count(this));
-		printf("coro_%d: yield\n", name);
-		clock_gettime(CLOCK_MONOTONIC, &t2);
-		time_plus(t1, t2, &full_time);
-		coro_yield();
-		clock_gettime(CLOCK_MONOTONIC, &t1);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
-	printf("coro_%d: full time of work is %ld sec %f msec, %lld switches\n", name, full_time.tv_sec, (full_time.tv_nsec / 1000000.0), coro_switch_count(this));
+	printf("coro_%d: full time of work is %ld sec %f msec, %lld switches  ", name, full_time.tv_sec, (full_time.tv_nsec / 1000000.0), coro_switch_count(this));
 	return coro_status(this);
 }
 
@@ -267,7 +236,7 @@ main(int argc, char** argv)
 	struct coro *c;
 	while ((c = coro_sched_wait()) != NULL) {
 		if (coro_is_finished(c)){
-			printf("Finished\n");
+			printf("[finished]\n");
 			coro_delete(c);
 		}
 	}
@@ -282,7 +251,7 @@ main(int argc, char** argv)
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	
 	full_t = time_count(t1, t2);
-	printf("Full time: sec: %ld msec: %f\n", full_t.tv_sec, full_t.tv_nsec / 1000000.0);
+	printf("Full time:\n      sec: %ld msec: %f\n", full_t.tv_sec, full_t.tv_nsec / 1000000.0);
 	
 	return 0;
 }
