@@ -17,12 +17,15 @@ struct timespec time_count(struct timespec t1, struct timespec t2){
 void time_add(struct timespec t, struct timespec* where){
 	where->tv_sec = where->tv_sec + t.tv_sec;
 	where->tv_nsec = where->tv_nsec + t.tv_nsec;
+	if (where->tv_nsec > 1000000000){
+		where->tv_sec = where->tv_sec + (where->tv_nsec / 1000000000);
+		where->tv_nsec = where->tv_nsec % 1000000000;
+	}
 }
 
 void time_plus(struct timespec t1, struct timespec t2, struct timespec* where){
 	struct timespec diff = time_count(t1, t2);
-	where->tv_sec = where->tv_sec + diff.tv_sec;
-	where->tv_nsec = where->tv_nsec + diff.tv_nsec;
+	time_add(diff, where);
 }
 
 long int count_file(char* name){
@@ -126,19 +129,28 @@ int partition(int arr[], int low, int high){
 	return (i + 1);
 }
 struct timespec quickSort(int arr[], int low, int high){
-	struct timespec t1, t2;
+	struct timespec t1, t2, full_time;
+	full_time.tv_sec = 0;
+	full_time.tv_nsec = 0;
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	if (low < high) {
+		struct timespec half_qt;
 		int pi = partition(arr, low, high);
-		quickSort(arr, low, pi - 1);
-		quickSort(arr, pi + 1, high);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
+		time_plus(t1, t2, &full_time);
+		
+		half_qt = quickSort(arr, low, pi - 1);
+		time_add(half_qt, &full_time);
+		
+		half_qt = quickSort(arr, pi + 1, high);
+		time_add(half_qt, &full_time);
+		
 		coro_yield();
+		clock_gettime(CLOCK_MONOTONIC, &t1);
 	}
-	else{
-		clock_gettime(CLOCK_MONOTONIC, &t2);
-	}
-	return time_count(t1, t2);
+	clock_gettime(CLOCK_MONOTONIC, &t2);
+	time_plus(t1, t2, &full_time);
+	return full_time;
 }
 
 struct meta{
@@ -146,10 +158,13 @@ struct meta{
 	int file_num, curr_name, num_of_cor;
 };
 
+
 static int
 coroutine_func_f(void *context)
 {
 	struct timespec t1, t2, full_time;
+	full_time.tv_sec = 0;
+	full_time.tv_nsec = 0;
 	int time_rez = clock_gettime(CLOCK_MONOTONIC, &t1);
 	if (time_rez != 0)
 		printf("time prob");
@@ -172,8 +187,10 @@ coroutine_func_f(void *context)
 		long int len = count_file(file_name);
 		int* arr = malloc(len * sizeof(int));
 		read_file(arr, fptr);
-		
 		fclose(fptr);
+		
+		clock_gettime(CLOCK_MONOTONIC, &t2);
+		time_plus(t1, t2, &full_time);
 		
 		struct timespec qt = quickSort(arr, 0, len-1);
 		time_add(qt, &full_time);
@@ -184,6 +201,7 @@ coroutine_func_f(void *context)
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		time_plus(t1, t2, &full_time);
 		coro_yield();
+		
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 		       
 		fptr = fopen(file_name, "w");
@@ -196,6 +214,14 @@ coroutine_func_f(void *context)
 		if (meta_info->curr_name >= meta_info->file_num){
 			break;
 		}
+		
+		//printf("coro_%d: switch count\n", name);
+		coro_switch_count(this);
+		clock_gettime(CLOCK_MONOTONIC, &t2);
+		time_plus(t1, t2, &full_time);
+		coro_yield();
+	
+		clock_gettime(CLOCK_MONOTONIC, &t1);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
@@ -208,7 +234,7 @@ main(int argc, char** argv)
 {
 	struct timespec t1, t2, full_t;
 	clock_gettime(CLOCK_MONOTONIC, &t1);
-
+	
 	int coroutine_num = atoi(argv[1]); //number of coroutines
 	int diff = 2;
 	if (coroutine_num == 0){
