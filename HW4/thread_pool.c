@@ -91,7 +91,6 @@ thread_pool_delete(struct thread_pool *pool)
 		pthread_join(pool->threads[i], NULL);
 	free(pool->task_q);
 	pthread_mutex_destroy(&pool->mutex);
-	free(pool);
 	return 0;
 }
 
