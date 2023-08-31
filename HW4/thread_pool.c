@@ -21,7 +21,6 @@ struct thread_pool {
 	
 	int thread_count, task_count;
 	struct thread_task* task_q;
-	struct thread_task* end_q;
 	pthread_mutex_t mutex;
 	pthread_cond_t  cond_var;
 	
@@ -34,24 +33,23 @@ void* thread_func(void* args){
 		while(pool->task_q == NULL)
 			pthread_cond_wait(&pool->cond_var, &pool->mutex);
 		struct thread_task* task = pool->task_q;
-		pool->task_q = task->next;
-		pthread_mutex_unlock(&pool->mutex);
-		
+		pool->task_q = pool->task_q->next;
 		pthread_mutex_lock(&task->mutex);
 		task->status = 2;
 		pthread_mutex_unlock(&task->mutex);
 		
 		pthread_mutex_lock(&task->mutex);
 		task->res = task->function(task->arg);
-		pthread_mutex_unlock(&task->mutex);
-		
-		pthread_mutex_lock(&task->mutex);
 		task->status = 3;
 		pthread_mutex_unlock(&task->mutex);
 		
+		pthread_mutex_lock(&task->mutex);
 		if (task->detach){
+			pthread_mutex_unlock(&task->mutex);
 			thread_task_delete(task);
 		}
+		pthread_mutex_unlock(&task->mutex);
+		
 		pthread_mutex_unlock(&pool->mutex);
 		
 	}
@@ -67,7 +65,7 @@ thread_pool_new(int max_thread_count, struct thread_pool **pool)
 	struct thread_pool *tp = (struct thread_pool* )malloc(sizeof(struct thread_pool));
 	tp->max_count = max_thread_count;
 	tp->thread_count = 0; tp->task_count = 0;
-	tp->task_q = NULL; tp->end_q = NULL;
+	tp->task_q = NULL;
 	for (int i = 0; i < max_thread_count; ++i){
 		tp->threads[i] = 0;
 	}
@@ -103,14 +101,12 @@ thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
 		return TPOOL_ERR_TOO_MANY_TASKS;
 	}
 	pool->task_count++;
+	//printf("\n1-%d\n", (task->next==NULL));
 	if (pool->task_q == NULL){
 		pool->task_q = task;
-		pool->task_q->next = task;
-		pool->end_q = task;
 	}
 	else{
-		pool->end_q->next = task;
-		pool->end_q = task;
+		pool->task_q->next = task;
 	}
 	task->status = 1;
 	
@@ -124,6 +120,7 @@ thread_pool_push_task(struct thread_pool *pool, struct thread_task *task)
 			}
 		}
 	}
+	//printf("\n2-%d\n", (pool->task_q->next==NULL));
 	pthread_mutex_unlock(&pool->mutex);
 	
 	return 0;
@@ -175,12 +172,11 @@ thread_task_join(struct thread_task *task, void **result)
 int
 thread_task_delete(struct thread_task *task)
 {
-	if (task->status < 4) {return TPOOL_ERR_TASK_IN_POOL; }
+	if (task->status != 0 & task->status < 4) {return TPOOL_ERR_TASK_IN_POOL; }
 	
 	pthread_mutex_lock(&task->mutex);
 	free(task->next);
 	pthread_mutex_destroy(&task->mutex);
-	free(task);
 	return 0;
 }
 
