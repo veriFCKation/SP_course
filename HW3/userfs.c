@@ -84,9 +84,10 @@ ufs_open(const char *filename, int flags)
 			exist = true;
 			break;
 		}
+		fptr = fptr->next;
 	}
 	
-	if (!exist && (flags & UFS_CREATE)){
+	if (!exist && (flags == UFS_CREATE)){
 		struct file *new_file = (struct file *)malloc(sizeof(struct file));
 		new_file->name = (char*)filename;
 		new_file->refs = 0;
@@ -102,7 +103,7 @@ ufs_open(const char *filename, int flags)
 		return -1;
 	}
 	int fd = 0;
-	while (fd < file_descriptor_count && file_descriptors[fd] != NULL){
+	while (fd < file_descriptor_count && (*(file_descriptors+fd)) != NULL){
 		fd++;
 	}
 	
@@ -114,7 +115,10 @@ ufs_open(const char *filename, int flags)
 	struct filedesc* new_fd = (struct filedesc *)malloc(sizeof(struct filedesc));
 	new_fd->file = fptr;
 	new_fd->flag = (flags == UFS_CREATE) ? UFS_READ_WRITE : flags;
-	file_descriptors[fd] = new_fd;
+	if (file_descriptors == NULL)
+		file_descriptors = &new_fd;
+	else
+		*(file_descriptors + fd) = new_fd;
 	return fd+1;
 }
 
@@ -208,12 +212,14 @@ ufs_close(int fd)
 		return -1;
 	}
 	fd--;
-	struct file* curr_file = file_descriptors[fd]->file;
-	file_descriptors[fd] = NULL;
-	curr_file->refs--;
-	if (curr_file->refs == 0){
-		ufs_delete(curr_file->name);
-	} 
+	struct file* curr_file = (*(file_descriptors+fd))->file;
+	*(file_descriptors+fd) = NULL;
+	if (curr_file != NULL){
+		curr_file->refs--;
+		if (curr_file->refs == 0){
+			ufs_delete(curr_file->name);
+		}
+	}
 	return 0;
 }
 
@@ -235,7 +241,7 @@ ufs_delete(const char *filename)
 	}
 	int fd = 0;
 	while (fptr->refs > 0){
-		if (file_descriptors[fd]->file->name != filename){
+		if ((*(file_descriptors+fd))->file->name != filename){
 			fd++; continue;
 		}
 		ufs_close(fd);
@@ -250,8 +256,6 @@ ufs_delete(const char *filename)
 	}
 	if (fptr->prev != NULL) fptr->prev->next = fptr->next;
 	if (fptr->next != NULL) fptr->next->prev = fptr->prev;
-	free(fptr->name);
-	free(fptr);
 	return 0;
 }
 
