@@ -103,15 +103,24 @@ int add_file_desc(){ //returns number of free slot in the list
 		new_desc->desc_num = 0;
 		file_descriptors = &new_desc;
 		file_descriptor_capacity++;
+		if (file_descriptors != NULL){//without this it dies (i don't know why)
+			struct filedesc *start = *file_descriptors;
+			while (start != NULL){
+				start = start->next;
+			}
+		}
 		return 0;
 	}
+	
+	
 	struct filedesc *start = *file_descriptors;
 	struct filedesc *end = NULL;
 	while (start != NULL){
-		if (start->file == NULL) {return start->desc_num;}
+		if (start->file == NULL) { return start->desc_num;}
 		end = start;
 		start = start->next;
 	}
+	
 	struct filedesc *new_desc = (struct filedesc *)malloc(sizeof(struct filedesc));
 	new_desc->desc_num = file_descriptor_capacity;
 	end->next = new_desc;
@@ -156,7 +165,6 @@ ufs_open(const char *filename, int flags)
 	}
 	
 	int fd = add_file_desc();
-	
 	struct filedesc* new_fd = get_file_desc(fd);
 	if (new_fd == NULL){ printf("\naaa\n"); return 0;}
 	new_fd->file = fptr;
@@ -297,12 +305,6 @@ ufs_delete(const char *filename)
 	if (fptr->prev == NULL && fptr->next == NULL) file_list = NULL;
 	if (fptr->prev != NULL) fptr->prev->next = fptr->next;
 	if (fptr->next != NULL) fptr->next->prev = fptr->prev;
-	printf("fincheck:\n");
-	struct file *f = file_list;
-	while (f != NULL){
-		printf("%s\n", f->name);
-		f = f->next;
-	}
 	return 0;
 }
 
