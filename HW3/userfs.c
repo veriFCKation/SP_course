@@ -52,10 +52,13 @@ static struct file *file_list = NULL;
 
 struct filedesc {
 	struct file *file;
-	
 	enum open_flags flag;
 	struct block* fd_ptr;
 	/* PUT HERE OTHER MEMBERS */
+	
+	struct filedesc *prev;
+	struct filedesc *next;
+	int desc_num;
 };
 
 /**
@@ -74,6 +77,50 @@ ufs_errno()
 	return ufs_error_code;
 }
 
+struct filedesc * get_file_desc(int fd){ //returns pointer to filedesc
+	if (file_descriptors == NULL) {printf("\nbad *\n"); return NULL;}
+	
+	struct filedesc *start = *file_descriptors;
+	
+	while (start != NULL){
+		if (start->desc_num == fd) {return start; }
+		start = start->next;
+	}
+	return NULL;
+}
+
+int del_file_desc(int fd){ //returns success status
+	struct filedesc *fd_ptr = get_file_desc(fd);
+	if (fd_ptr == NULL) {return -1;}
+	
+	fd_ptr->file = NULL;
+	return 0;
+}
+
+int add_file_desc(){ //returns number of free slot in the list
+	if (file_descriptors == NULL) {
+		struct filedesc *new_desc = (struct filedesc *)malloc(sizeof(struct filedesc));
+		new_desc->desc_num = 0;
+		file_descriptors = &new_desc;
+		file_descriptor_capacity++;
+		return 0;
+	}
+	struct filedesc *start = *file_descriptors;
+	struct filedesc *end = NULL;
+	while (start != NULL){
+		if (start->file == NULL) {return start->desc_num;}
+		end = start;
+		start = start->next;
+	}
+	struct filedesc *new_desc = (struct filedesc *)malloc(sizeof(struct filedesc));
+	new_desc->desc_num = file_descriptor_capacity;
+	end->next = new_desc;
+	new_desc->prev = end;
+	file_descriptor_capacity++;
+	return new_desc->desc_num;
+}
+
+
 int
 ufs_open(const char *filename, int flags)
 {
@@ -87,7 +134,12 @@ ufs_open(const char *filename, int flags)
 		fptr = fptr->next;
 	}
 	
-	if (!exist && (flags == UFS_CREATE)){
+	if (!exist && flags != UFS_CREATE){
+		ufs_error_code = UFS_ERR_NO_FILE;
+		return -1;
+	}
+	
+	if (!exist){
 		struct file *new_file = (struct file *)malloc(sizeof(struct file));
 		new_file->name = (char*)filename;
 		new_file->refs = 0;
@@ -102,23 +154,14 @@ ufs_open(const char *filename, int flags)
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
-	int fd = 0;
-	while (fd < file_descriptor_count && (*(file_descriptors+fd)) != NULL){
-		fd++;
-	}
 	
-	if (fd == file_descriptor_count){
-		file_descriptor_count++;
-	}
+	int fd = add_file_desc();
 	
-	fptr->refs++;
-	struct filedesc* new_fd = (struct filedesc *)malloc(sizeof(struct filedesc));
+	struct filedesc* new_fd = get_file_desc(fd);
+	if (new_fd == NULL){ printf("\naaa\n"); return 0;}
 	new_fd->file = fptr;
+	new_fd->file->refs++;
 	new_fd->flag = (flags == UFS_CREATE) ? UFS_READ_WRITE : flags;
-	if (file_descriptors == NULL)
-		file_descriptors = &new_fd;
-	else
-		*(file_descriptors + fd) = new_fd;
 	return fd+1;
 }
 
@@ -207,19 +250,22 @@ ufs_read(int fd, char *buf, size_t size)
 int
 ufs_close(int fd)
 {
-	if (fd <= 0 || fd > file_descriptor_count){
+	if (fd <= 0 || fd > file_descriptor_capacity){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
 	fd--;
-	struct file* curr_file = (*(file_descriptors+fd))->file;
-	*(file_descriptors+fd) = NULL;
-	if (curr_file != NULL){
-		curr_file->refs--;
-		if (curr_file->refs == 0){
-			ufs_delete(curr_file->name);
-		}
+	struct filedesc* file_desc = get_file_desc(fd);
+	if (file_desc == NULL || file_desc->file == NULL) {
+		ufs_error_code = UFS_ERR_NO_FILE;
+		return -1;
 	}
+	struct file* curr_file = file_desc->file;
+	file_desc->file = NULL;
+	curr_file->refs--;
+	/*if (curr_file->refs == 0){
+		ufs_delete(curr_file->name);
+	}*/
 	return 0;
 }
 
@@ -233,18 +279,12 @@ ufs_delete(const char *filename)
 			exist = true;
 			break;
 		}
+		fptr = fptr->next;
 	}
 	
 	if (!exist){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
-	}
-	int fd = 0;
-	while (fptr->refs > 0){
-		if ((*(file_descriptors+fd))->file->name != filename){
-			fd++; continue;
-		}
-		ufs_close(fd);
 	}
 	struct block* cb = fptr->block_list;
 	while (cb != NULL){
@@ -254,8 +294,15 @@ ufs_delete(const char *filename)
 		cb = nb;
 		free(nb);
 	}
+	if (fptr->prev == NULL && fptr->next == NULL) file_list = NULL;
 	if (fptr->prev != NULL) fptr->prev->next = fptr->next;
 	if (fptr->next != NULL) fptr->next->prev = fptr->prev;
+	printf("fincheck:\n");
+	struct file *f = file_list;
+	while (f != NULL){
+		printf("%s\n", f->name);
+		f = f->next;
+	}
 	return 0;
 }
 
