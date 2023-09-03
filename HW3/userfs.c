@@ -89,14 +89,6 @@ struct filedesc * get_file_desc(int fd){ //returns pointer to filedesc
 	return NULL;
 }
 
-int del_file_desc(int fd){ //returns success status
-	struct filedesc *fd_ptr = get_file_desc(fd);
-	if (fd_ptr == NULL) {return -1;}
-	
-	fd_ptr->file = NULL;
-	return 0;
-}
-
 int add_file_desc(){ //returns number of free slot in the list
 	if (file_descriptors == NULL) {
 		struct filedesc *new_desc = (struct filedesc *)malloc(sizeof(struct filedesc));
@@ -133,6 +125,7 @@ int add_file_desc(){ //returns number of free slot in the list
 int
 ufs_open(const char *filename, int flags)
 {
+	//printf("\n%d - %d\n", file_descriptor_count, file_descriptor_capacity);
 	bool exist = false;
 	struct file *fptr = file_list;
 	while (fptr != NULL){
@@ -170,53 +163,75 @@ ufs_open(const char *filename, int flags)
 	new_fd->file = fptr;
 	new_fd->file->refs++;
 	new_fd->flag = (flags == UFS_CREATE) ? UFS_READ_WRITE : flags;
+	file_descriptor_count++;
 	return fd+1;
 }
 
 ssize_t
 ufs_write(int fd, const char *buf, size_t size)
 {
-	if (fd <= 0 || fd > file_descriptor_count){
+	if (fd <= 0 || fd > file_descriptor_capacity){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
 	fd--;
-	struct filedesc *curr_fd = file_descriptors[fd];
-	struct file *curr_file = curr_fd->file;
-	if (!(curr_fd->flag & UFS_WRITE_ONLY || curr_fd->flag & UFS_READ_WRITE)){
+	struct filedesc *curr_fd = get_file_desc(fd);
+	if (curr_fd == NULL){ ufs_error_code = UFS_ERR_NO_FILE; return -1;}
+	if (!(curr_fd->flag == UFS_WRITE_ONLY || curr_fd->flag == UFS_READ_WRITE)) {
 		ufs_error_code = UFS_ERR_NO_PERMISSION;
 		return -1;
 	}
-	
+	struct file *curr_file = curr_fd->file;
+	if (curr_file == NULL){ ufs_error_code = UFS_ERR_NO_FILE; return -1;}
 	if (curr_file->file_size + size > curr_file->max_file_size){
 		ufs_error_code = UFS_ERR_NO_MEM;
 		return -1;
 	}
-	size_t unwritten_s = size;
-	char* curr_buf = (char*)buf;
-	while (unwritten_s > 0){
-		struct block* curr_block = curr_fd->fd_ptr;
-		size_t real_write = unwritten_s;
-		if (BLOCK_SIZE - curr_block->occupied < real_write){
-			real_write = BLOCK_SIZE - curr_block->occupied;
-		}
-		memcpy(&curr_block->memory[BLOCK_SIZE],curr_buf, real_write);
-		unwritten_s = unwritten_s - real_write;
-		curr_fd->fd_ptr->occupied = curr_fd->fd_ptr->occupied + real_write;
-		if (curr_fd->fd_ptr->occupied == BLOCK_SIZE){
-			if (curr_block->next == NULL){
-				struct block* new_b = (struct block*)malloc(sizeof(struct block));
-				new_b->prev = curr_block;
-				new_b->next = NULL;
-				new_b->memory = (char*)malloc(sizeof(char)* BLOCK_SIZE);
-				
-				curr_block->next = new_b;
+	size_t written = 0;
+	struct block * curr_block = curr_file->last_block;
+	while (written < size){
+		if (curr_block == NULL){
+			struct block *new_block = (struct block *)malloc(sizeof(struct block));
+			new_block->occupied = 0;
+			new_block->next = NULL;
+			if (curr_file->block_list == NULL){
+				new_block->prev = NULL;
+				curr_file->block_list = new_block;
+				curr_file->last_block = new_block;
 			}
-			curr_fd->fd_ptr = curr_block->next;
+			else{
+				if (curr_file->last_block != NULL){
+					curr_file->last_block = new_block;
+					new_block->prev = curr_file->last_block;
+				}
+				else new_block->prev = NULL;
+			}
+			curr_block = new_block;
 		}
+		if (curr_block->occupied == BLOCK_SIZE){
+			if (curr_block->next == NULL){
+				struct block *new_block = (struct block *)malloc(sizeof(struct block));
+				new_block->occupied = 0;
+				new_block->next = NULL;
+				new_block->prev = curr_block;
+				curr_block->next = new_block;
+				if (curr_block == curr_file->last_block)
+					curr_file->last_block = new_block;
+			}
+			curr_block = curr_block->next;
+			continue;
+		}
+		size_t free_mem = BLOCK_SIZE - curr_block->occupied;
+		size_t size_to_write = (free_mem > size) ? size : free_mem;
+		//actual writting to curr_block->memory
+		//memcpy(curr_block->memory, buf, size_to_write);
+		//buf = (buf + size_to_write);
+		curr_block->occupied = curr_block->occupied + size_to_write;
+		written = written + size_to_write;
+		if (written >= curr_file->max_file_size)
+			break;
 	}
-	curr_file->file_size = curr_file->file_size + (size - unwritten_s);
-	return (size - unwritten_s);
+	return written;
 }
 
 ssize_t
@@ -271,6 +286,7 @@ ufs_close(int fd)
 	struct file* curr_file = file_desc->file;
 	file_desc->file = NULL;
 	curr_file->refs--;
+	file_descriptor_count--;
 	/*if (curr_file->refs == 0){
 		ufs_delete(curr_file->name);
 	}*/
