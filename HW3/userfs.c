@@ -77,68 +77,16 @@ ufs_errno()
 {
 	return ufs_error_code;
 }
-/*
-void look(){
-	if (file_descriptors == NULL) {return;}
-	struct filedesc *start = *file_descriptors;
-	
-	//struct filedesc *buf = *file_descriptors;
-	
-	printf("--start = %ld\n", (long int)(*file_descriptors));
-	printf("-look:\n");
-	while (start != NULL){
-		printf("-[%ld] desc_num=%d -> (is null?) %d\n", (long int)start, start->desc_num, (start->file == NULL));
-		printf("--prev = [%ld]\n", (start->prev == NULL) ? -1 : (long int)start->prev);
-		printf("--next = [%ld]\n", (start->next == NULL) ? -1 : (long int)start->next);
-		if (start->next == NULL) break;
-		start = start->next;
-	}
-	while (start != NULL){
-		if (start->prev == NULL) break;
-		start = start->prev;
-	}
-	printf("-done\n");
-	printf("--start = %ld\n", (long int)(*file_descriptors));
-}
-
-void look_file(){
-	printf("-look:\n");
-	if (file_list == NULL) {printf("-done\n"); return; }
-	struct file *start = file_list;
-	while (start != NULL){
-		printf("-[%ld] name '%s'-> size = %ld\n", (long int)start, start->name, start->file_size);
-		start = start->next;
-	}
-	printf("-done\n");
-}
-
-
-void look_block(struct file* curr){
-	struct block *start = curr->block_list;
-	printf("-check blocks (addr -> %ld):\n", (long int)curr);
-	int i = 0;
-	while (start != NULL){
-		printf("-%d -> %d/512  addr->%ld\n", i, start->occupied, (long int)start);
-		start = start->next;
-		++i;
-	}
-	printf("-done\n");
-}*/
 
 struct filedesc * get_file_desc(int fd){ //returns pointer to filedesc
-	//printf("--finding %d\n", fd);
 	if (file_descriptors == NULL) {printf("\nbad *\n"); return NULL;}
 	
 	struct filedesc *start = *file_descriptors;
 	
 	while (start != NULL){
-	//	printf("-[%ld] desc_num=%d -> (is null?) %d\n", (long int)start, start->desc_num, (start->file == NULL));
-	//	printf("--prev = [%ld]\n", (start->prev == NULL) ? -1 : (long int)start->prev);
-	//	printf("--next = [%ld]\n", (start->next == NULL) ? -1 : (long int)start->next);
 		if (start->desc_num == fd) {return start;}
 		start = start->next;
 	}
-	//printf("--dno\n");
 	return NULL;
 }
 /////
@@ -148,6 +96,8 @@ int add_file_desc(){ //returns number of free slot in the list
 		new_desc->desc_num = 0;
 		new_desc->fd_ptr = NULL;
 		new_desc->shift = 0;
+		new_desc->next = NULL;
+		new_desc->prev = NULL;
 		file_descriptors = &new_desc;
 		file_descriptor_capacity++;
 		if (file_descriptors != NULL){//without this it dies (i don't know why)
@@ -161,9 +111,16 @@ int add_file_desc(){ //returns number of free slot in the list
 	
 	struct filedesc *start = *file_descriptors;
 	
+	if (start == NULL){
+		file_descriptors = NULL;
+		int fd = add_file_desc();
+		return fd;
+	}
+	
 	struct filedesc *end = NULL;
 	int num = 0;
 	while (start != NULL){
+		
 		if (start->file == NULL) { return start->desc_num;}
 		num++;
 		end = start;
@@ -195,17 +152,13 @@ ufs_open(const char *filename, int flags)
 {
 	bool exist = false;
 	struct file *fptr = file_list;
-	
-	//printf("--------file findig:\n");
 	while (fptr != NULL){
-	//	printf("-[%ld] name '%s'-> size = %ld\n", (long int)fptr, fptr->name, fptr->file_size);
 		if (fptr->name == filename){
 			exist = true;
 			break;
 		}
 		fptr = fptr->next;
 	}
-	//printf("--------finish\n");
 	if (!exist && flags != UFS_CREATE){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
@@ -213,10 +166,8 @@ ufs_open(const char *filename, int flags)
 	
 	if (!exist){
 		struct filedesc * buff = (file_descriptors != NULL) ? *file_descriptors : NULL;
-		//if (file_descriptors != NULL) printf("----- [%ld] - good\n", (long int)(*file_descriptors));
 		struct file *new_file = (struct file *)malloc(sizeof(struct file));
 		if (file_descriptors != NULL) *file_descriptors = buff;
-		//if (file_descriptors != NULL) printf("----- [%ld] - bad\n", (long int)(*file_descriptors));
 		new_file->name = (char*)filename;
 		new_file->refs = 0;
 		new_file->max_file_size = MAX_FILE_SIZE; 
@@ -231,14 +182,16 @@ ufs_open(const char *filename, int flags)
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
-	//if (file_descriptors != NULL) printf("----- [%ld] -- good\n", (long int)(*file_descriptors));
+
 	int fd = add_file_desc();
-	//if (file_descriptors != NULL) printf("----- [%ld] -- bad\n", (long int)(*file_descriptors));
+	struct filedesc * buff2 = (file_descriptors != NULL) ? *file_descriptors : NULL;
 	struct filedesc* new_fd = get_file_desc(fd);
 	if (new_fd == NULL){ 
-		printf("-aaa");
-		return -1;
+		file_descriptors = NULL;
+		fd = add_file_desc();
+		new_fd =  get_file_desc(fd);
 	}
+	if (file_descriptors != NULL) *file_descriptors = buff2;
 	new_fd->file = fptr;
 	new_fd->file->refs++;
 	new_fd->flag = (flags == UFS_CREATE || flags == 0) ? UFS_READ_WRITE : flags;
@@ -377,10 +330,7 @@ ufs_read(int fd, char *buf, size_t size)
 	}
 	return readed;
 }
-/*
-93981824431872 -> 139755526897728
-94510942177024 -> 140485849333824
-*/
+
 int
 ufs_close(int fd)
 {
@@ -432,37 +382,6 @@ ufs_delete(const char *filename)
 	if (fptr->prev != NULL) fptr->prev->next = fptr->next;
 	if (fptr->next != NULL) fptr->next->prev = fptr->prev;
 
-	return 0;
-}
-
-int
-ufs_resize(int fd, size_t new_size){
-	if (fd <= 0 || fd > file_descriptor_count){
-		ufs_error_code = UFS_ERR_NO_FILE;
-		return -1;
-	}
-	fd--;
-	struct filedesc *curr_fd = file_descriptors[fd];
-	struct file *curr_file = curr_fd->file;
-	if (new_size > curr_file->max_file_size){
-		ufs_error_code = UFS_ERR_NO_MEM;
-		return -1;
-	}
-	struct block* cb = curr_file->block_list;
-	size_t curr_file_size = 0;
-	while (cb != NULL && curr_file_size + cb->occupied <= new_size){
-		curr_file_size = curr_file_size + cb->occupied;
-		cb = cb->next;
-	}
-	while (cb != NULL){
-		struct block* nb = cb->next;
-		free(cb->memory);
-		free(cb);
-		cb = nb;
-		free(nb);
-	}
-	curr_file->file_size = curr_file_size;
-	curr_file->max_file_size = new_size;
 	return 0;
 }
 
