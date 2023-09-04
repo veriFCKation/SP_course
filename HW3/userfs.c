@@ -106,7 +106,7 @@ void look_file(){
 	if (file_list == NULL) {printf("-done\n"); return; }
 	struct file *start = file_list;
 	while (start != NULL){
-		printf("-[%ld] name_%s -> size = %ld\n", (long int)start, start->name, start->file_size);
+		printf("-[%ld] name '%s'-> size = %ld\n", (long int)start, start->name, start->file_size);
 		start = start->next;
 	}
 	printf("-done\n");
@@ -126,19 +126,19 @@ void look_block(struct file* curr){
 }*/
 
 struct filedesc * get_file_desc(int fd){ //returns pointer to filedesc
-	printf("--finding %d\n", fd);
+	//printf("--finding %d\n", fd);
 	if (file_descriptors == NULL) {printf("\nbad *\n"); return NULL;}
 	
 	struct filedesc *start = *file_descriptors;
 	
 	while (start != NULL){
-		printf("-[%ld] desc_num=%d -> (is null?) %d\n", (long int)start, start->desc_num, (start->file == NULL));
-		printf("--prev = [%ld]\n", (start->prev == NULL) ? -1 : (long int)start->prev);
-		printf("--next = [%ld]\n", (start->next == NULL) ? -1 : (long int)start->next);
-		if (start->desc_num == fd) {return start; }
+	//	printf("-[%ld] desc_num=%d -> (is null?) %d\n", (long int)start, start->desc_num, (start->file == NULL));
+	//	printf("--prev = [%ld]\n", (start->prev == NULL) ? -1 : (long int)start->prev);
+	//	printf("--next = [%ld]\n", (start->next == NULL) ? -1 : (long int)start->next);
+		if (start->desc_num == fd) {return start;}
 		start = start->next;
 	}
-	printf("--dno\n");
+	//printf("--dno\n");
 	return NULL;
 }
 /////
@@ -195,25 +195,31 @@ ufs_open(const char *filename, int flags)
 {
 	bool exist = false;
 	struct file *fptr = file_list;
+	
+	//printf("--------file findig:\n");
 	while (fptr != NULL){
+	//	printf("-[%ld] name '%s'-> size = %ld\n", (long int)fptr, fptr->name, fptr->file_size);
 		if (fptr->name == filename){
 			exist = true;
 			break;
 		}
 		fptr = fptr->next;
 	}
+	//printf("--------finish\n");
 	if (!exist && flags != UFS_CREATE){
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
 	
 	if (!exist){
-		if (file_descriptors != NULL) printf("----- [%ld] - good\n", (long int)(*file_descriptors));
+		struct filedesc * buff = (file_descriptors != NULL) ? *file_descriptors : NULL;
+		//if (file_descriptors != NULL) printf("----- [%ld] - good\n", (long int)(*file_descriptors));
 		struct file *new_file = (struct file *)malloc(sizeof(struct file));
-		if (file_descriptors != NULL) printf("----- [%ld] - bad\n", (long int)(*file_descriptors));
+		if (file_descriptors != NULL) *file_descriptors = buff;
+		//if (file_descriptors != NULL) printf("----- [%ld] - bad\n", (long int)(*file_descriptors));
 		new_file->name = (char*)filename;
 		new_file->refs = 0;
-		new_file->max_file_size =  MAX_FILE_SIZE; 
+		new_file->max_file_size = MAX_FILE_SIZE; 
 		new_file->file_size = 0;
 		new_file->block_list = NULL;
 		new_file->last_block = NULL;
@@ -225,7 +231,9 @@ ufs_open(const char *filename, int flags)
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
+	//if (file_descriptors != NULL) printf("----- [%ld] -- good\n", (long int)(*file_descriptors));
 	int fd = add_file_desc();
+	//if (file_descriptors != NULL) printf("----- [%ld] -- bad\n", (long int)(*file_descriptors));
 	struct filedesc* new_fd = get_file_desc(fd);
 	if (new_fd == NULL){ 
 		printf("-aaa");
