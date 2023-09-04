@@ -141,14 +141,14 @@ void look(){
 
 
 void look_block(struct file* curr){
-	/*struct block *start = curr_fd->fd_ptr;
-	printf("check blocks (shift -> %d):\n", curr_fd->shift);
+	struct block *start = curr->block_list;
+	printf("check blocks (addr -> %ld):\n", (long int)curr);
 	int i = 0;
 	while (start != NULL){
 		printf("%d -> %d/512\n", i, start->occupied);
 		start = start->next;
 		++i;
-	}*/
+	}
 	printf("done\n");
 }
 
@@ -220,8 +220,7 @@ ufs_write(int fd, const char *buf, size_t size)
 		ufs_error_code = UFS_ERR_NO_MEM;
 		return -1;
 	}
-	//printf(".\n");
-	//look_block(curr_fd);
+	
 	size_t written = 0;
 	if (curr_fd->fd_ptr == NULL){
 		curr_fd->fd_ptr = curr_file->block_list;
@@ -233,7 +232,9 @@ ufs_write(int fd, const char *buf, size_t size)
 			new_block->occupied = 0;
 			new_block->memory = (char *)malloc(BLOCK_SIZE);
 			new_block->next = NULL;
+			curr_fd->shift = 0;
 			if (curr_file->block_list == NULL){
+				
 				new_block->prev = NULL;
 				curr_file->block_list = new_block;
 				curr_file->last_block = new_block;
@@ -243,24 +244,12 @@ ufs_write(int fd, const char *buf, size_t size)
 					curr_file->last_block = new_block;
 					new_block->prev = curr_file->last_block;
 				}
-				else new_block->prev = NULL;
+				else {
+					new_block->prev = NULL;
+					curr_file->last_block = new_block;
+				}
 			}
 			curr_block = new_block;
-		}
-		if (curr_fd->shift == BLOCK_SIZE){
-			if (curr_block->next == NULL){
-				struct block *new_block = (struct block *)malloc(sizeof(struct block));
-				new_block->occupied = 0;
-				new_block->memory = (char *)malloc(BLOCK_SIZE);
-				new_block->next = NULL;
-				new_block->prev = curr_block;
-				curr_block->next = new_block;
-				if (curr_block == curr_file->last_block)
-					curr_file->last_block = new_block;
-			}
-			curr_fd->shift = 0;
-			curr_block = curr_block->next;
-			continue;
 		}
 		size_t free_mem = BLOCK_SIZE - curr_fd->shift;
 		size_t size_to_write = (free_mem > (size-written)) ? (size-written) : free_mem;
@@ -270,10 +259,30 @@ ufs_write(int fd, const char *buf, size_t size)
 			curr_block->occupied = curr_fd->shift + size_to_write;
 		written = written + size_to_write;
 		curr_fd->shift = curr_fd->shift + size_to_write;
+		
 		if (written >= curr_file->max_file_size)
 			break;
-		curr_block = curr_block->next;
+
+		if (curr_block->next == NULL){
+			struct block *new_block = (struct block *)malloc(sizeof(struct block));
+			new_block->occupied = 0;
+			new_block->memory = (char *)malloc(BLOCK_SIZE);
+			new_block->next = NULL;
+			new_block->prev = curr_block;
+			curr_block->next = new_block;
+			if (curr_block == curr_file->last_block)
+				curr_file->last_block = new_block;
+		}
+		
+		curr_fd->fd_ptr = curr_block;
+		if (curr_fd->shift == BLOCK_SIZE) {
+			curr_fd->shift = 0;
+			curr_block = curr_block->next;
+		}
 	}
+	
+	//look_block(curr_file);
+	
 	return written;
 }
 
@@ -300,7 +309,7 @@ ufs_read(int fd, char *buf, size_t size)
 	}
 	struct block * curr_block = curr_fd->fd_ptr;
 	
-	//look_block(curr_fd);
+	//look_block(curr_file);
 	
 	while (readed < size){
 		//printf("%ld %ld\n", readed, size);
