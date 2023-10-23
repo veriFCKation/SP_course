@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 enum {
 	BLOCK_SIZE = 512,
@@ -57,7 +58,7 @@ struct filedesc {
 	enum open_flags file_flags;
 	
 	struct block* curr_block;
-	size_t readed;
+	size_t shift;
 };
 
 /**
@@ -135,7 +136,7 @@ struct filedesc* insert_filedesc(struct file* file_){
 	}
 	exist_desc->file = file_;
 	exist_desc->curr_block = NULL;
-	exist_desc->readed = 0;
+	exist_desc->shift = 0;
 	
 	if (file_descriptors == NULL) {file_descriptors = exist_desc; }
 	return exist_desc;
@@ -143,7 +144,7 @@ struct filedesc* insert_filedesc(struct file* file_){
 
 struct block* add_new_block(struct file* file){
 	struct block* new_block = (struct block *)malloc(sizeof(struct block));
-	new_block->memory = (char *)malloc(sizeof(char));
+	new_block->memory = (char *)malloc(sizeof(char)*BLOCK_SIZE);
 	new_block->occupied = 0;
 	new_block->next = NULL;
 	new_block->prev = file->last_block;
@@ -222,24 +223,41 @@ ufs_write(int fd, const char *buf, size_t size)
 		ufs_error_code = UFS_ERR_NO_PERMISSION;
 		return -1;
 	}
-	if (desc->curr_block == NULL) {desc->curr_block = desc->file->last_block;}
+	if (desc->curr_block == NULL) {
+		desc->curr_block = desc->file->last_block;
+	}
 	struct block *curr = desc->curr_block;
+//	printf("w cur_block == null? %d\n", (curr == NULL));
+	char *buf_write = (char *)buf;
 	size_t written = 0;
 	size_t size_to_write = 0;
-	while (written != size){
-		if (curr == NULL){
+	while (written < size){
+//		printf("w --c %d, sh= %d\n", curr, desc->shift);
+		if (curr == NULL || desc->shift == BLOCK_SIZE){
 			curr = add_new_block(desc->file);
+			desc->shift = 0;
 		}
-		size_to_write = ((size - written) % BLOCK_SIZE);
-		if (size_to_write + curr->occupied > BLOCK_SIZE){
-			size_to_write = BLOCK_SIZE - curr->occupied;
+		size_to_write = (size - written);
+		if (curr->occupied < desc->shift) { desc->shift = curr->occupied;}
+		if (size_to_write + desc->shift > BLOCK_SIZE){
+			size_to_write = BLOCK_SIZE - desc->shift;
 		}
-		
+		char *to = curr->memory + desc->shift;
+		memcpy(to, buf_write, size_to_write * sizeof(char));
+//		printf("w  mem %s\n", curr->memory);
 		///
 		written = written + size_to_write;
+		desc->shift = desc->shift + size_to_write;
+		if (desc->shift > curr->occupied){ curr->occupied = desc->shift;}
+		buf_write = buf_write + (int)size_to_write;
+		if (curr->occupied >= BLOCK_SIZE){ 
+			curr = curr->next;
+			desc->shift = 0;
+		}
+		desc->curr_block = curr;
 		if (desc->file->file_size + written >= MAX_FILE_SIZE) {break;}
-		
 	}
+//	printf("w ->c %d, o= %d, sh= %d\n", desc->curr_block, desc->curr_block->occupied, desc->shift);
 	desc->file->file_size = desc->file->file_size + written;
 	return written;
 }
@@ -247,12 +265,46 @@ ufs_write(int fd, const char *buf, size_t size)
 ssize_t
 ufs_read(int fd, char *buf, size_t size)
 {
-	/* IMPLEMENT THIS FUNCTION */
-	(void)fd;
-	(void)buf;
-	(void)size;
-	ufs_error_code = UFS_ERR_NOT_IMPLEMENTED;
-	return -1;
+	struct filedesc *desc = get_desc_by_num(fd);
+	if (desc == NULL || desc->file == NULL){
+		ufs_error_code = UFS_ERR_NO_FILE;
+		return -1;
+	}
+	if (desc->file_flags == UFS_WRITE_ONLY){
+		ufs_error_code = UFS_ERR_NO_PERMISSION;
+		return -1;
+	}
+	if (desc->curr_block == NULL) {desc->curr_block = desc->file->block_list;}
+	struct block *curr = desc->curr_block;
+//	printf("r cur_block == null? %d\n", (curr == NULL));
+	char *buf_to_write = buf;
+	size_t readed = 0;
+	size_t size_to_read = 0;
+	while (readed < size){
+//		printf("r --c %d, sh= %d\n", curr, desc->shift);
+		if (curr == NULL){break;}
+		size_to_read = (size - readed);
+		if (size_to_read > curr->occupied - desc->shift){
+			size_to_read = curr->occupied - desc->shift;
+		}
+		char *from = curr->memory + desc->shift;
+//		printf("r  mem %s, %d\n", curr->memory, size_to_read);
+		memcpy(buf_to_write, from, size_to_read * sizeof(char));
+//		printf("r  buf %s\n",buf);
+		readed = readed + size_to_read;
+		buf_to_write = buf_to_write + (int)size_to_read;
+		desc->shift = desc->shift + size_to_read;
+		if (desc->shift >= curr->occupied){ break;}
+		if (desc->shift >= BLOCK_SIZE){
+			curr = curr->next;
+			if (curr->next != NULL){
+				desc->curr_block = curr;
+				desc->shift = 0;
+			}
+		}
+	}
+//	printf("r ->c %d, o= %d, sh= %d\n", desc->curr_block, desc->curr_block->occupied, desc->shift);
+	return readed;
 }
 
 void
