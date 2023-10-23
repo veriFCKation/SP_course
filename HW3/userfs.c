@@ -213,7 +213,7 @@ ufs_delete(const char *filename)
 
 ssize_t
 ufs_write(int fd, const char *buf, size_t size)
-{ //size = num of char what needs to write
+{
 	struct filedesc *desc = get_desc_by_num(fd);
 	if (desc == NULL || desc->file == NULL){
 		ufs_error_code = UFS_ERR_NO_FILE;
@@ -227,12 +227,10 @@ ufs_write(int fd, const char *buf, size_t size)
 		desc->curr_block = desc->file->last_block;
 	}
 	struct block *curr = desc->curr_block;
-//	printf("w cur_block == null? %d\n", (curr == NULL));
 	char *buf_write = (char *)buf;
 	size_t written = 0;
 	size_t size_to_write = 0;
 	while (written < size){
-//		printf("w --c %d, sh= %d\n", curr, desc->shift);
 		if (curr == NULL || desc->shift == BLOCK_SIZE){
 			curr = add_new_block(desc->file);
 			desc->shift = 0;
@@ -244,7 +242,6 @@ ufs_write(int fd, const char *buf, size_t size)
 		}
 		char *to = curr->memory + desc->shift;
 		memcpy(to, buf_write, size_to_write * sizeof(char));
-//		printf("w  mem %s\n", curr->memory);
 		///
 		written = written + size_to_write;
 		desc->shift = desc->shift + size_to_write;
@@ -258,18 +255,6 @@ ufs_write(int fd, const char *buf, size_t size)
 		if (desc->file->file_size + written >= MAX_FILE_SIZE) {break;}
 	}
 	desc->file->file_size = desc->file->file_size + written;
-	
-//	printf("\n");
-//	struct block *b = desc->file->block_list;
-//	int i = 0;
-//	while (b != NULL){
-//		printf(" %d -o=%d - %s\n", i, b->occupied, b->memory);
-//		i++;
-//		b = b->next;
-//	}
-//	printf("\n");
-	
-//	printf("w ->c %d, o= %d, sh= %d\n", desc->curr_block, desc->curr_block->occupied, desc->shift);
 	return written;
 }
 
@@ -291,21 +276,17 @@ ufs_read(int fd, char *buf, size_t size)
 		desc->shift = 0;
 	}
 	struct block *curr = desc->curr_block;
-//	printf("r cur_block == null? %d, sh=%d\n", (curr == NULL), desc->shift);
 	char *buf_to_write = buf;
 	size_t readed = 0;
 	size_t size_to_read = 0;
 	while (readed < size){
-//		printf("r --c %d, sh= %d\n", curr, desc->shift);
 		if (curr == NULL){break;}
 		size_to_read = (size - readed);
 		if (size_to_read > curr->occupied - desc->shift){
 			size_to_read = curr->occupied - desc->shift;
 		}
 		char *from = curr->memory + desc->shift;
-//		printf("r  mem %s, %d\n", curr->memory, size_to_read);
 		memcpy(buf_to_write, from, size_to_read * sizeof(char));
-//		printf("r  buf %s\n",buf);
 		readed = readed + size_to_read;
 		buf_to_write = buf_to_write + (int)size_to_read;
 		desc->shift = desc->shift + size_to_read;
@@ -318,7 +299,7 @@ ufs_read(int fd, char *buf, size_t size)
 			}
 		}
 	}
-//	printf("r ->c %d, o= %d, sh= %d\n", desc->curr_block, desc->curr_block->occupied, desc->shift);
+
 	return readed;
 }
 
