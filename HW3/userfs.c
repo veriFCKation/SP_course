@@ -178,6 +178,19 @@ ufs_open(const char *filename, int flags)
 	return file_desc->desc_num;
 }
 
+void destroy_file(struct file *file){
+	if (file == NULL) return;
+	struct block *curr = file->last_block;
+	struct block *buf = NULL;
+	while (curr != NULL){
+		buf = curr->prev;
+		free(curr->memory);
+		free(curr);
+		curr = buf;
+	}
+	free(file->name);
+}
+
 int
 ufs_close(int fd)
 {
@@ -190,6 +203,8 @@ ufs_close(int fd)
 		ufs_error_code = UFS_ERR_NO_FILE;
 		return -1;
 	}
+	
+	desc->file->refs--;
 	
 	desc->file = NULL;
 	return 0;
@@ -208,6 +223,7 @@ ufs_delete(const char *filename)
 	if (file->prev != NULL){ file->prev->next = file->next;}
 	if (file->prev == NULL && file->next == NULL) {file_list = NULL;}
 	
+	destroy_file(file);
 	free(file);
 	return 0;
 }
@@ -311,35 +327,17 @@ ufs_read(int fd, char *buf, size_t size)
 	return readed;
 }
 
-void destroy_file(struct file *file){
-	struct block *curr = file->last_block;
-	struct block *buf = NULL;
-	while (curr != NULL){
-		buf = curr->prev;
-		free(curr->memory);
-		free(curr);
-		curr = buf;
-	}
-	free(file->last_block);
-	free(file->block_list);
-}
-
 void
 ufs_destroy(void)
 {
-	struct file *fp = file_list;
-	while (fp != NULL){
-		destroy_file(fp);
-		fp = fp->next;
-		if (fp != NULL) free(fp->prev);
-	}
-	free(file_list);
-	
 	struct filedesc *fd = file_descriptors;
+	struct filedesc *buf = NULL;
 	while (fd != NULL){
+		buf = fd->next;
+		destroy_file(fd->file);
 		free(fd->file);
-		fd = fd->next;
-		if (fd != NULL) free(fd->prev);
+		free(fd);
+		fd = buf;
 	}
-	free(file_descriptors);
+	
 }
