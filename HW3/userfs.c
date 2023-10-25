@@ -264,13 +264,13 @@ ufs_write(int fd, const char *buf, size_t size)
 		num = num + 1;
 		size_to_write = (size - written);
 		if (curr->occupied < desc->shift) { desc->shift = curr->occupied;}
-		if (size_to_write + desc->shift > BLOCK_SIZE){
-			size_to_write = BLOCK_SIZE - desc->shift;
+		if ((int)size_to_write + desc->shift > BLOCK_SIZE){
+			size_to_write = (size_t)(BLOCK_SIZE - desc->shift);
 		}
 		char *to = curr->memory + desc->shift;
 		memcpy(to, buf_write, size_to_write);
 		written = written + size_to_write;
-		desc->shift = desc->shift + size_to_write;
+		desc->shift = desc->shift + (int)size_to_write;
 		if (desc->shift > curr->occupied){
 			desc->file->file_size = desc->file->file_size + (desc->shift - curr->occupied);
 			curr->occupied = desc->shift;
@@ -308,14 +308,14 @@ ufs_read(int fd, char *buf, size_t size)
 		if (curr == NULL){break;}
 		num = num + 1;
 		size_to_read = (size - readed);
-		if (size_to_read > curr->occupied - desc->shift){
-			size_to_read = curr->occupied - desc->shift;
+		if ((int)size_to_read > curr->occupied - desc->shift){
+			size_to_read = (size_t)(curr->occupied - desc->shift);
 		}
 		char *from = curr->memory + desc->shift;
 		memcpy(buf_to_write, from, size_to_read);
 		readed = readed + size_to_read;
 		buf_to_write = buf_to_write + (int)size_to_read;
-		desc->shift = desc->shift + size_to_read;
+		desc->shift = desc->shift + (int)size_to_read;
 		if (desc->shift >= curr->occupied || desc->shift >= BLOCK_SIZE){
 			curr = curr->next;
 			if (curr != NULL){
