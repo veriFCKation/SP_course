@@ -97,7 +97,7 @@ struct filedesc* get_desc_by_num(int descnum){
 
 struct file* create_file(const char* filename){
 	struct file* file = (struct file *)malloc(sizeof(struct file));
-	file->name = (char *)malloc(sizeof(char) * 32);
+	file->name = (char *)malloc(sizeof(char) *32);
 	strcpy(file->name, filename);
 	file->block_list = NULL;
 	file->last_block = NULL;
@@ -145,7 +145,7 @@ struct filedesc* insert_filedesc(struct file* file_){
 
 struct block* add_new_block(struct file* file){
 	struct block* new_block = (struct block *)malloc(sizeof(struct block));
-	new_block->memory = (char *)malloc(sizeof(char)*BLOCK_SIZE);
+	new_block->memory = (char *)malloc(BLOCK_SIZE);
 	new_block->occupied = 0;
 	new_block->next = NULL;
 	new_block->prev = file->last_block;
@@ -158,10 +158,8 @@ struct block* add_new_block(struct file* file){
 int
 ufs_open(const char *filename, int flags)
 {
-//	printf("---open fd for %s---\n", filename);
 	struct file* exist_file = get_file_by_name(filename);
 	if (exist_file == NULL){
-//		printf("----create '%s'----\n", filename);
 		if (flags != UFS_CREATE){
 			ufs_error_code = UFS_ERR_NO_FILE;
 			return -1;
@@ -177,7 +175,6 @@ ufs_open(const char *filename, int flags)
 	else
 		file_desc->file_flags = flags;
 	exist_file->refs++;
-///	printf("open fd=%d, name='%s', *f=%d, *bl=%d\n", file_desc->desc_num, file_desc->file->name, file_desc->file, file_desc->file->block_list);
 	return file_desc->desc_num;
 }
 
@@ -238,30 +235,34 @@ ufs_write(int fd, const char *buf, size_t size)
 	char *buf_write = (char *)buf;
 	size_t written = 0;
 	size_t size_to_write = 0;
+	int num = 0;
 	while (written < size){
+		if (desc->shift >= BLOCK_SIZE){ 
+			curr = curr->next;
+			desc->shift = 0;
+		}
 		if (curr == NULL){
 			curr = add_new_block(desc->file);
 			desc->shift = 0;
 		}
+		num = num + 1;
 		size_to_write = (size - written);
 		if (curr->occupied < desc->shift) { desc->shift = curr->occupied;}
 		if (size_to_write + desc->shift > BLOCK_SIZE){
 			size_to_write = BLOCK_SIZE - desc->shift;
 		}
 		char *to = curr->memory + desc->shift;
-		memcpy(to, buf_write, size_to_write * sizeof(char));
+		memcpy(to, buf_write, size_to_write);
 		written = written + size_to_write;
 		desc->shift = desc->shift + size_to_write;
-		if (desc->shift > curr->occupied){ curr->occupied = desc->shift;}
+		if (desc->shift > curr->occupied){
+			desc->file->file_size = desc->file->file_size + (desc->shift - curr->occupied);
+			curr->occupied = desc->shift;
+		}
 		buf_write = buf_write + (int)size_to_write;
 		desc->curr_block = curr;
-		if (desc->shift >= BLOCK_SIZE){ 
-			curr = curr->next;
-			desc->shift = 0;
-		}
-		if (desc->file->file_size + written >= MAX_FILE_SIZE) {break;}
+		if (desc->file->file_size == MAX_FILE_SIZE) {break;}
 	}
-	desc->file->file_size = desc->file->file_size + written;
 	return written;
 }
 
@@ -286,14 +287,16 @@ ufs_read(int fd, char *buf, size_t size)
 	char *buf_to_write = buf;
 	size_t readed = 0;
 	size_t size_to_read = 0;
+	int num = 0;
 	while (readed < size){
 		if (curr == NULL){break;}
+		num = num + 1;
 		size_to_read = (size - readed);
 		if (size_to_read > curr->occupied - desc->shift){
 			size_to_read = curr->occupied - desc->shift;
 		}
 		char *from = curr->memory + desc->shift;
-		memcpy(buf_to_write, from, size_to_read * sizeof(char));
+		memcpy(buf_to_write, from, size_to_read);
 		readed = readed + size_to_read;
 		buf_to_write = buf_to_write + (int)size_to_read;
 		desc->shift = desc->shift + size_to_read;
@@ -311,4 +314,5 @@ ufs_read(int fd, char *buf, size_t size)
 void
 ufs_destroy(void)
 {
+	
 }
