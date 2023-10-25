@@ -42,7 +42,7 @@ struct file {
 	struct file *prev;
 
 	/* PUT HERE OTHER MEMBERS */
-	size_t file_size;
+	int file_size;
 };
 
 /** List of all files. */
@@ -58,7 +58,7 @@ struct filedesc {
 	enum open_flags file_flags;
 	
 	struct block* curr_block;
-	size_t shift;
+	int shift;
 };
 
 /**
