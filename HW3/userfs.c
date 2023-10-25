@@ -311,8 +311,35 @@ ufs_read(int fd, char *buf, size_t size)
 	return readed;
 }
 
+void destroy_file(struct file *file){
+	struct block *curr = file->last_block;
+	struct block *buf = NULL;
+	while (curr != NULL){
+		buf = curr->prev;
+		free(curr->memory);
+		free(curr);
+		curr = buf;
+	}
+	free(file->last_block);
+	free(file->block_list);
+}
+
 void
 ufs_destroy(void)
 {
+	struct file *fp = file_list;
+	while (fp != NULL){
+		destroy_file(fp);
+		fp = fp->next;
+		if (fp != NULL) free(fp->prev);
+	}
+	free(file_list);
 	
+	struct filedesc *fd = file_descriptors;
+	while (fd != NULL){
+		free(fd->file);
+		fd = fd->next;
+		if (fd != NULL) free(fd->prev);
+	}
+	free(file_descriptors);
 }
