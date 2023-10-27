@@ -4,6 +4,19 @@
 #include <string.h>
 #include "libcoro.h"
 
+struct meta{
+	char* file_names[1000];
+	int file_num, curr_name, num_of_cor;
+	
+	long target_latency;
+	long *last_yield_time; 
+};
+
+struct quant{
+	long latency;
+	long *last_indx;
+};
+
 struct timespec time_count(struct timespec t1, struct timespec t2){
 	long int sec = (t2.tv_nsec - t1.tv_nsec) < 0 ? (t2.tv_sec - t1.tv_sec - 1) :
 							(t2.tv_sec - t1.tv_sec);
@@ -26,6 +39,20 @@ void time_add(struct timespec t, struct timespec* where){
 void time_plus(struct timespec t1, struct timespec t2, struct timespec* where){
 	struct timespec diff = time_count(t1, t2);
 	time_add(diff, where);
+}
+
+bool is_it_yield_time(struct timespec *now, struct quant *info){
+	
+	long now_numbr = now->tv_sec * 1000000.0 + now->tv_nsec / 1000.0;
+	if (*info->last_indx == -1){
+		info->last_indx = &now_numbr;
+		return false;
+	}
+	if ((now_numbr - *info->last_indx) > info->latency){
+		info->last_indx = &now_numbr;
+		return true;
+	}
+	return false;
 }
 
 long int count_file(char* name){
@@ -128,7 +155,8 @@ int partition(int arr[], int low, int high){
 	swap(&arr[i + 1], &arr[high]);
 	return (i + 1);
 }
-struct timespec quickSort(int arr[], int low, int high){
+
+struct timespec quickSort(int arr[], int low, int high, struct quant *info){
 	struct timespec t1, t2, full_time;
 	full_time.tv_sec = 0;
 	full_time.tv_nsec = 0;
@@ -139,24 +167,21 @@ struct timespec quickSort(int arr[], int low, int high){
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		time_plus(t1, t2, &full_time);
 		
-		half_qt = quickSort(arr, low, pi - 1);
+		half_qt = quickSort(arr, low, pi - 1, info);
 		time_add(half_qt, &full_time);
 		
-		half_qt = quickSort(arr, pi + 1, high);
+		half_qt = quickSort(arr, pi + 1, high, info);
 		time_add(half_qt, &full_time);
 		
-		coro_yield();
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		if (is_it_yield_time(&now, info)) {coro_yield();}
 		clock_gettime(CLOCK_MONOTONIC, &t1);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
 	return full_time;
 }
-
-struct meta{
-	char* file_names[1000];
-	int file_num, curr_name, num_of_cor;
-};
 
 
 static int
@@ -173,6 +198,10 @@ coroutine_func_f(void *context)
 	struct meta* meta_info = context;
 	int name = meta_info->num_of_cor;
 	meta_info->num_of_cor++;
+	
+	struct quant *time_info = (struct quant*)malloc(sizeof(struct quant));
+	time_info->latency = meta_info->target_latency;
+	time_info->last_indx = &meta_info->last_yield_time[name];
 	
 	printf("Started coroutine coro_%d\n", name);
 	
@@ -192,7 +221,7 @@ coroutine_func_f(void *context)
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		time_plus(t1, t2, &full_time);
 		
-		struct timespec qt = quickSort(arr, 0, len-1);
+		struct timespec qt = quickSort(arr, 0, len-1, time_info);
 		time_add(qt, &full_time);
 		
 		clock_gettime(CLOCK_MONOTONIC, &t1);
@@ -215,7 +244,6 @@ coroutine_func_f(void *context)
 			break;
 		}
 		
-		//printf("coro_%d: switch count\n", name);
 		coro_switch_count(this);
 		clock_gettime(CLOCK_MONOTONIC, &t2);
 		time_plus(t1, t2, &full_time);
@@ -226,6 +254,7 @@ coroutine_func_f(void *context)
 	clock_gettime(CLOCK_MONOTONIC, &t2);
 	time_plus(t1, t2, &full_time);
 	printf("coro_%d: full time of work is %ld sec %f msec, %lld switches  ", name, full_time.tv_sec, (full_time.tv_nsec / 1000000.0), coro_switch_count(this));
+	free(time_info);
 	return coro_status(this);
 }
 
@@ -235,19 +264,26 @@ main(int argc, char** argv)
 	struct timespec t1, t2, full_t;
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	
-	int coroutine_num = atoi(argv[1]); //number of coroutines
-	int diff = 2;
+	int target_latency_msec = atoi(argv[1]); //latency befor everything
+	int coroutine_num = atoi(argv[2]); //number of coroutines
+	double N = coroutine_num * 1.0;
+	int diff = 3;
 	if (coroutine_num == 0){
 		coroutine_num = 3;
-		diff = 1;
+		diff = 2;
 	}
 	struct meta* meta_info = (struct meta*)malloc(sizeof(struct meta));
 	meta_info->num_of_cor = 0;
 	meta_info->file_num = argc - diff;
+	meta_info->target_latency = (target_latency_msec * 1000.0) / N;
+	meta_info->last_yield_time = (long*)malloc(sizeof(long) * coroutine_num);
+
+	printf("\nTL: %ld nsec\n", meta_info->target_latency);
 	
 	int arg_i = diff;
 	while (arg_i != argc){
 		meta_info->file_names[arg_i-diff] = argv[arg_i];
+		meta_info->last_yield_time[arg_i-diff] = -1;
 		arg_i++;
 	}
 	meta_info->curr_name = 0;
@@ -267,6 +303,7 @@ main(int argc, char** argv)
 		}
 	}
 	/* All coroutines have finished. */
+	free(meta_info->last_yield_time);
 	free(meta_info);
 	//merging
 	FILE* rez_file = fopen("rezult.txt", "w");
