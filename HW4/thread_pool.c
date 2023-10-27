@@ -21,7 +21,6 @@ struct thread_task {
 	
 	bool needs_detach;
 	
-//	pthread_mutex_t cond_mut;
 	pthread_cond_t task_cond;
 	
 	struct thread_task *next;
@@ -77,7 +76,7 @@ void *thread_func(void *args){
 				pool->busy[thread_indx] = true; //now process busy
 			}
 		pthread_mutex_unlock(&pool->pool_mut);
-/*?*/		if (task == NULL) {continue;} ///<- pool->process_count--; ????????
+		if (task == NULL) {continue;} 
 		if (pool->works == false) {break;}
 		
 		pthread_mutex_lock(&task->task_mut);
@@ -114,19 +113,6 @@ void *thread_func(void *args){
 	}
 }
 
-
-/*int count_just_task(struct thread_pool *pool){ //count task in queue
-	int count = 0;
-	
-	struct thread_task *curr = pool->task_queue;
-	while (curr != NULL){
-		count++;
-		curr = curr->next;
-	}
-		
-	return count;
-}*/
-
 int count_unjoined(struct thread_pool *pool){ //count already processed task
 	int count = 0;
 	
@@ -138,15 +124,6 @@ int count_unjoined(struct thread_pool *pool){ //count already processed task
 	
 	return count;
 }
-
-/*int count_all_tasks(struct thread_pool *pool){
-	int count = count_unjoined(pool);
-
-	count = count + count_just_task(pool);
-	
-	count = count + pool->process_count;
-	return count;
-}*/
 
 int
 thread_pool_new(int max_thread_count, struct thread_pool **pool)
@@ -192,8 +169,6 @@ thread_pool_delete(struct thread_pool *pool)
 		if (pool->process_count > 0) {flag = true;}
 		
 		if (pool->queue_count > 0) {flag = true;}
-		
-		//if (count_unjoined(pool) > 0) {flag = true;}
 		
 		if (flag){
 			pthread_mutex_unlock(&pool->pool_mut);
@@ -286,8 +261,7 @@ thread_task_new(struct thread_task **task, thread_task_f function, void *arg)
 	new_task->prev = NULL;
 	
 	new_task->needs_detach = false;
-	
-//	pthread_mutex_init(&new_task->cond_mut,NULL); //for finish signal
+
 	pthread_cond_init(&new_task->task_cond,NULL);
 	
 	*task = new_task;
@@ -343,7 +317,6 @@ thread_task_delete(struct thread_task *task)
 	pthread_mutex_unlock(&task->task_mut);
 	
 	pthread_mutex_destroy(&task->task_mut);
-//	pthread_mutex_destroy(&task->cond_mut);
 	pthread_cond_destroy(&task->task_cond);
 	free(task);
 	return 0;
