@@ -103,13 +103,13 @@ void *thread_func(void *args){
 		
 		bool flag = false;
 		pthread_mutex_lock(&task->task_mut);
-			flag = task->needs_detach;
 			task->status = FINISHED;
 			//pthread_cond_signal(&task->task_cond);
 			pthread_cond_broadcast(&task->task_cond);
+			flag = task->needs_detach;
 		pthread_mutex_unlock(&task->task_mut);
 		
-		if (flag) { thread_task_delete(task);}
+		if (flag) {free(task);}
 	}
 }
 
@@ -169,6 +169,8 @@ thread_pool_delete(struct thread_pool *pool)
 		if (pool->process_count > 0) {flag = true;}
 		
 		if (pool->queue_count > 0) {flag = true;}
+		
+		//if (count_unjoined(pool) > 0) {flag = true;}
 		
 		if (flag){
 			pthread_mutex_unlock(&pool->pool_mut);
@@ -261,7 +263,8 @@ thread_task_new(struct thread_task **task, thread_task_f function, void *arg)
 	new_task->prev = NULL;
 	
 	new_task->needs_detach = false;
-
+	
+//	pthread_mutex_init(&new_task->cond_mut,NULL); //for finish signal
 	pthread_cond_init(&new_task->task_cond,NULL);
 	
 	*task = new_task;
@@ -286,16 +289,19 @@ int
 thread_task_join(struct thread_task *task, void **result)
 {
 	if (task == NULL && result == NULL) {return -1;}
-	
+	printf("try join\n");
 	pthread_mutex_lock(&task->task_mut);
 		if (task->status < PUSHED) {
 			pthread_mutex_unlock(&task->task_mut);
 			return TPOOL_ERR_TASK_NOT_PUSHED;
 		}
+		
 		while (task->status < FINISHED) {pthread_cond_wait(&task->task_cond, &task->task_mut);}
 		
+		//printf("here %d\n", (long int)task);
 		task->status = JOINED;
 		*result = task->rez;
+		
 	pthread_mutex_unlock(&task->task_mut);
 	return 0;
 }
@@ -306,8 +312,8 @@ thread_task_delete(struct thread_task *task)
 	if (task == NULL) {return -1;}
 	
 	pthread_mutex_lock(&task->task_mut);
-		if (task->status != JOINED && task->status != CREATED 
-				&& !(task->status == FINISHED && task->needs_detach)) {
+		if (task->status != JOINED && task->status != CREATED ){
+				//&& !(task->status == FINISHED && task->needs_detach)) {
 			pthread_mutex_unlock(&task->task_mut);
 			return TPOOL_ERR_TASK_IN_POOL;
 		}
@@ -317,6 +323,7 @@ thread_task_delete(struct thread_task *task)
 	pthread_mutex_unlock(&task->task_mut);
 	
 	pthread_mutex_destroy(&task->task_mut);
+//	pthread_mutex_destroy(&task->cond_mut);
 	pthread_cond_destroy(&task->task_cond);
 	free(task);
 	return 0;
@@ -334,13 +341,14 @@ thread_task_detach(struct thread_task *task)
 			pthread_mutex_unlock(&task->task_mut);
 			return TPOOL_ERR_TASK_NOT_PUSHED;
 		}
-		task->needs_detach = true;
-		
 		if (task->status == FINISHED){
 			pthread_mutex_unlock(&task->task_mut);
-			return thread_task_delete(task);
+			pthread_mutex_destroy(&task->task_mut);
+			pthread_cond_destroy(&task->task_cond);
+			return 0;
 		}
-		
+
+		task->needs_detach = true;
 	pthread_mutex_unlock(&task->task_mut);
 	return 0;
 }
