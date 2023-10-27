@@ -235,6 +235,7 @@ test_thread_pool_max_tasks(void)
 		unit_fail_if(thread_task_join(t, &result) != 0);
 		unit_fail_if(thread_task_delete(t) != 0);
 		unit_fail_if(result != &arg);
+		//printf("#%d - ok\n", i);
 	}
 	free(tasks);
 	unit_fail_if(thread_pool_delete(p) != 0);
