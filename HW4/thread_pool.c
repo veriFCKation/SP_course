@@ -106,10 +106,10 @@ void *thread_func(void *args){
 			task->status = FINISHED;
 			//pthread_cond_signal(&task->task_cond);
 			pthread_cond_broadcast(&task->task_cond);
-			flag = task->needs_detach;
+			flag = task->needs_detach && (task->status == JOINED);
 		pthread_mutex_unlock(&task->task_mut);
 		
-		if (flag) {free(task);}
+		if (flag) { free(task);}
 	}
 }
 
@@ -289,7 +289,6 @@ int
 thread_task_join(struct thread_task *task, void **result)
 {
 	if (task == NULL && result == NULL) {return -1;}
-	printf("try join\n");
 	pthread_mutex_lock(&task->task_mut);
 		if (task->status < PUSHED) {
 			pthread_mutex_unlock(&task->task_mut);
@@ -298,7 +297,6 @@ thread_task_join(struct thread_task *task, void **result)
 		
 		while (task->status < FINISHED) {pthread_cond_wait(&task->task_cond, &task->task_mut);}
 		
-		//printf("here %d\n", (long int)task);
 		task->status = JOINED;
 		*result = task->rez;
 		
@@ -325,7 +323,7 @@ thread_task_delete(struct thread_task *task)
 	pthread_mutex_destroy(&task->task_mut);
 //	pthread_mutex_destroy(&task->cond_mut);
 	pthread_cond_destroy(&task->task_cond);
-	free(task);
+	//free(task);
 	return 0;
 }
 
