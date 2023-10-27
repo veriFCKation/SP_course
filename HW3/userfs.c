@@ -341,3 +341,85 @@ ufs_destroy(void)
 	}
 	
 }
+
+#ifdef NEED_RESIZE
+
+/**
+ * Resize a file opened by the file descriptor @a fd. If current
+ * file size is less than @a new_size, then new empty blocks are
+ * created and positions of opened file descriptors are not
+ * changed. If the current size is bigger than @a new_size, then
+ * the blocks are truncated. Opened file descriptors behind the
+ * new file size should proceed from the new file end.
+ **/
+int
+ufs_resize(int fd, size_t new_size){
+	struct filedesc *desc = get_desc_by_num(fd);
+	if (desc == NULL || desc->file == NULL){
+		ufs_error_code = UFS_ERR_NO_FILE;
+		return -1;
+	}
+	
+	struct file *file = desc->file;
+	if ((int)new_size == file->file_size){ return 0;}
+	if ((int)new_size > file->file_size){ //add empty blocks
+		if ((int)new_size > MAX_FILE_SIZE){
+		ufs_error_code = UFS_ERR_NO_MEM;
+		return -1;
+		}
+		struct block *curr = file->last_block;
+		int need_to_add = (int)new_size - file->file_size;
+		if (need_to_add >= BLOCK_SIZE - file->last_block->occupied){
+			need_to_add = need_to_add - (BLOCK_SIZE - file->last_block->occupied);
+			file->last_block->occupied = BLOCK_SIZE;
+		}
+		while (need_to_add > 0){
+			add_new_block(file);
+			if (need_to_add >= BLOCK_SIZE - file->last_block->occupied){
+				need_to_add = need_to_add - (BLOCK_SIZE - file->last_block->occupied);
+				file->last_block->occupied = BLOCK_SIZE;
+			}
+			else{
+				file->last_block->occupied = need_to_add;
+				need_to_add = 0;
+			}
+		}
+	}
+	else{ //cut existed blocks
+		struct block *curr = file->last_block;
+		int need_to_cut = file->file_size - (int)new_size;
+		while (need_to_cut > 0 && curr != NULL){
+			if (need_to_cut >= curr->occupied){
+				need_to_cut = need_to_cut - curr->occupied;
+				curr->occupied = 0;
+				curr = curr->prev;
+				if (curr != NULL) {
+					free(curr->next->memory);
+					free(curr->next);
+				}
+				curr->next = NULL;
+			}
+			else{
+				curr->occupied = curr->occupied - need_to_cut;
+				need_to_cut = 0;
+			}
+		}
+		file->file_size = (int)new_size;
+		file->last_block = curr;
+	}
+	struct filedesc *curr_fd = file_descriptors;
+	while (curr_fd != NULL){
+		if (curr_fd->file == file){
+			curr_fd->curr_block = file->last_block;
+			curr_fd->shift = file->last_block->occupied;
+		}
+		curr_fd = curr_fd->next;
+	}
+	desc->curr_block = file->block_list;
+	desc->shift = 0;
+	printf("fs = %d cd= %d\n", file->file_size, desc->curr_block);
+	printf("occ= %d sh= %d\n", desc->curr_block->occupied, desc->shift);
+	return 0;
+}
+
+#endif
