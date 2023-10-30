@@ -102,6 +102,7 @@ void *thread_func(void *args){
 			}
 		pthread_mutex_unlock(&task->task_mut);
 	}
+	return 0;
 }
 
 int
