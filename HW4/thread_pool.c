@@ -41,9 +41,6 @@ struct thread_pool {
 	
 	int process_count; //pushed+running
 	
-	struct thread_task *finish_list; //finished+joined
-	struct thread_task *finish_tail;
-	
 	bool works;
 };
 
@@ -62,7 +59,7 @@ void *thread_func(void *args){
 		struct thread_task *task = NULL;
 		
 		pthread_mutex_lock(&pool->pool_mut);
-			if (pool->task_queue != NULL){ //taske from queue
+			if (pool->task_queue != NULL){ //take from queue
 				task = pool->task_queue;
 				pool->task_queue = pool->task_queue->next;
 				pool->queue_count--;
@@ -88,42 +85,23 @@ void *thread_func(void *args){
 		pthread_mutex_lock(&pool->pool_mut);
 			pool->process_count--; // delete from processed
 			pool->busy[thread_indx] = false;
-			
-			if (pool->finish_tail != NULL){ //put to finished
-				pool->finish_tail->next = task;
-				task->prev = pool->finish_tail;
-				pool->finish_tail = task;
-			}
-			else{
-				task->prev = NULL;
-				pool->finish_list = task;
-				pool->finish_tail = task;
-			}
 		pthread_mutex_unlock(&pool->pool_mut);
 		
-		bool flag = false;
 		pthread_mutex_lock(&task->task_mut);
 			task->status = FINISHED;
 			//pthread_cond_signal(&task->task_cond);
 			pthread_cond_broadcast(&task->task_cond);
-			flag = task->needs_detach;
+			
+			if (task->needs_detach) {
+				pthread_mutex_unlock(&task->task_mut);
+				
+				pthread_mutex_destroy(&task->task_mut);
+				pthread_cond_destroy(&task->task_cond);
+				free(task);
+				continue;
+			}
 		pthread_mutex_unlock(&task->task_mut);
-		
-		flag = flag && (task->status == JOINED);
-		if (flag) { free(task);}
 	}
-}
-
-int count_unjoined(struct thread_pool *pool){ //count already processed task
-	int count = 0;
-	
-	struct thread_task *curr = pool->finish_list;
-	while (curr != NULL){
-		if (curr->status != JOINED) {count++;}
-		curr = curr->next;
-	}
-	
-	return count;
 }
 
 int
@@ -147,9 +125,6 @@ thread_pool_new(int max_thread_count, struct thread_pool **pool)
 	
 	new_pool->process_count = 0;
 	
-	new_pool->finish_list = NULL;
-	new_pool->finish_tail = NULL;
-	
 	*pool = new_pool;
 	return 0;
 }
@@ -171,8 +146,6 @@ thread_pool_delete(struct thread_pool *pool)
 		
 		if (pool->queue_count > 0) {flag = true;}
 		
-		//if (count_unjoined(pool) > 0) {flag = true;}
-		
 		if (flag){
 			pthread_mutex_unlock(&pool->pool_mut);
 			return TPOOL_ERR_HAS_TASKS;
@@ -186,28 +159,6 @@ thread_pool_delete(struct thread_pool *pool)
 		status = pthread_join(pool->threads[i], NULL);
 		if (status != 0) { printf("Thread #%d still alive, better call 47\n", i);} 
 	}
-	
-	/*pthread_mutex_lock(&pool->pool_mut);
-		struct thread_task *curr = pool->finish_list;
-		while (curr != NULL){
-			pthread_mutex_destroy(&curr->task_mut);
-			pthread_cond_destroy(&curr->task_cond);
-			curr = curr->next;
-			if (curr != NULL) {
-				free(curr->prev);
-			}
-		}
-		
-		curr = pool->task_queue;
-		while (curr != NULL){
-			pthread_mutex_destroy(&curr->task_mut);
-			pthread_cond_destroy(&curr->task_cond);
-			curr = curr->next;
-			if (curr != NULL) {
-				free(curr->prev);
-			}
-		}
-	pthread_mutex_unlock(&pool->pool_mut);*/
 
 	pthread_mutex_destroy(&pool->pool_mut);
 	free(pool->threads);
@@ -330,23 +281,21 @@ thread_task_join(struct thread_task *task, void **result)
 int
 thread_task_delete(struct thread_task *task)
 {
-	if (task == NULL) {return 0;}
+	if (task == NULL || task->needs_detach) {return 0;}
 	
-	bool flag = false;
 	pthread_mutex_lock(&task->task_mut);
-		if (task->status != JOINED && task->status != CREATED
-				&& !(task->status == FINISHED && task->needs_detach)) {
+		if (task->status != JOINED && task->status != CREATED) {
 			pthread_mutex_unlock(&task->task_mut);
 			return TPOOL_ERR_TASK_IN_POOL;
 		}
-		flag = task->needs_detach;
+		
 		if (task->next != NULL) {task->next->prev = task->prev;}
 		if (task->prev != NULL) {task->prev->next = task->next;}
 	pthread_mutex_unlock(&task->task_mut);
 	
 	pthread_mutex_destroy(&task->task_mut);
 	pthread_cond_destroy(&task->task_cond);
-	if (flag) {free(task);}
+	free(task);
 	return 0;
 }
 
@@ -365,8 +314,6 @@ thread_task_detach(struct thread_task *task)
 		task->needs_detach = true;
 		
 		if (task->status == FINISHED){
-				if (task->next != NULL) {task->next->prev = task->prev;}
-				if (task->prev != NULL) {task->prev->next = task->next;}
 			pthread_mutex_unlock(&task->task_mut);
 			
 			pthread_mutex_destroy(&task->task_mut);
