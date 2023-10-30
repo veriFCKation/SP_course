@@ -367,7 +367,7 @@ ufs_resize(int fd, size_t new_size){
 		ufs_error_code = UFS_ERR_NO_MEM;
 		return -1;
 		}
-		struct block *curr = file->last_block;
+
 		int need_to_add = (int)new_size - file->file_size;
 		if (need_to_add >= BLOCK_SIZE - file->last_block->occupied){
 			need_to_add = need_to_add - (BLOCK_SIZE - file->last_block->occupied);
@@ -417,8 +417,6 @@ ufs_resize(int fd, size_t new_size){
 	}
 	desc->curr_block = file->block_list;
 	desc->shift = 0;
-	printf("fs = %d cd= %d\n", file->file_size, desc->curr_block);
-	printf("occ= %d sh= %d\n", desc->curr_block->occupied, desc->shift);
 	return 0;
 }
 
